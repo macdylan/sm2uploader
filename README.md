@@ -7,6 +7,8 @@ a py script for send the gcode file to Snapmaker 2 via WiFi
 - Easy to use
 
 ## Usage:
+$ pip3 install -r requirements
+
 ```
 $ sm2uploader.py /path/to/file
 Discovering ...
