@@ -36,6 +36,18 @@ def discover(msg=b"discover", port=20054, timeout=4):
 
 def select_server():
     print("Discovering ...\n")
+
+    fcache = os.path.join(tempfile.gettempdir(), "sm2.ip")
+    try:
+        fd = open(fcache, "r")
+        ip = fd.readline().strip()
+        if ip:
+            return ip
+    except FileNotFoundError:
+        pass
+    finally:
+        unlink(fcache)
+
     server = discover()
 
     if len(server) == 1:
@@ -95,6 +107,8 @@ def upload(fpath, server):
     if conn.status_code == 200:
         print("Success ✅")
         print("Start print this file on the touchscreen.")
+
+        open(os.path.join(tempfile.gettempdir(), "sm2.ip"), "w").write(server)
         return True
 
     else:
