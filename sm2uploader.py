@@ -5,6 +5,7 @@ import sys
 import time
 import socket
 import tempfile
+import threading
 
 try:
     import requests
@@ -86,18 +87,19 @@ def upload(fpath, server):
         print("Please check the touchscreen and tap Disconnect.")
         return None
 
+    open(ftoken, mode="w").write(token)
     if not check_status(endpoint, token):
         # expired
         unlink(ftoken)
         print("⚠️ Screen authorization needed.")
         return None
 
-    open(ftoken, mode="w").write(token)
-
     print("IP Address\t: %s" % server)
     print("Token\t\t: %s" % token)
     print("Payload\t\t: %s" % fpath)
     print("Payload size(b)\t: %d" % fsize)
+
+    _start_heartbeat(endpoint, token)
 
     print("\nSending ... ", end="")
     conn = requests.post(url=endpoint+"/upload",
@@ -105,10 +107,12 @@ def upload(fpath, server):
         files={"file": open(fpath, "rb")},
         timeout=40)
     if conn.status_code == 200:
+        _stop_heartbeat()
+        disconnect(endpoint, token)
+        open(os.path.join(tempfile.gettempdir(), "sm2.ip"), "w").write(server)
+
         print("Success ✅")
         print("Start print this file on the touchscreen.")
-
-        open(os.path.join(tempfile.gettempdir(), "sm2.ip"), "w").write(server)
         return True
 
     else:
@@ -126,12 +130,21 @@ def connect(endpoint, token):
         print("Error: %s" % e)
 
 
+def disconnect(endpoint, token):
+    try:
+        requests.post(url=endpoint+"/disconnect", data={"token": token})
+    except requests.exceptions.ConnectionError as e:
+        pass
+        # print("Error: %s" % e)
+
+
 def check_status(endpoint, token):
     try:
         tip = True
         while True:
             conn = requests.get(url=endpoint+"/status", params={"token": token})
             if conn.status_code == 200:
+                # print("[200]%s" % conn.text)
                 return True
 
             if conn.status_code == 204 and tip:
@@ -153,6 +166,30 @@ def unlink(fpath):
         pass
 
 
+__heartbeat_thread = None
+__heartbeat_stop = False
+def _start_heartbeat(endpoint, token):
+    global __heartbeat_thread
+    global __heartbeat_stop
+    def _check():
+        while not __heartbeat_stop:
+            # print("heartbeat")
+            requests.get(url=endpoint+"/status", params={"token": token})
+            time.sleep(3)
+
+    if not __heartbeat_thread or not __heartbeat_thread.is_alive():
+        __heartbeat_stop = False
+        __heartbeat_thread = threading.Thread(target=_check, daemon=True)
+        __heartbeat_thread.start()
+
+
+def _stop_heartbeat():
+    global __heartbeat_thread
+    global __heartbeat_stop
+    __heartbeat_stop = True
+    if __heartbeat_thread:
+        __heartbeat_thread.join()
+
 
 if __name__ == "__main__":
     res = None
@@ -166,7 +203,8 @@ if __name__ == "__main__":
         res = upload(sys.argv[1], server)
 
     else:
-        print("Usage: sm2uploader.py /path/to/file [ip]")
+        print(select_server())
+        #print("Usage: sm2uploader.py /path/to/file [ip]")
         sys.exit(1)
 
     if not res:
