@@ -1,41 +1,26 @@
 # sm2uploader
-a py script for send the gcode file to Snapmaker 2 via WiFi
+A command-line tool for send the gcode file to Snapmaker 2 via WiFi connection.
 
 ## Features:
 - Auto discover machines (UDP broadcast)
-- No need to click Yes button on the touch screen every time for authorization connect (keep token in tempdir)
-- Easy to use
+- No need to click Yes button on the touch screen every time for authorization connect
+- Support for multiple platforms including win/macOS/Linux/RaspberryPi
 
 ## Usage:
-$ pip3 install -r requirements
+Download [sm2uploader-{platform}-{arch}](https://github.com/macdylan/sm2uploader/releases/tag/go1.0)
+  - Linux/macOS: `chmod +x sm2uploader`
+  - Win: add prefix `.exe` that you can drag and drop files into icon to quick start
 
 ```
-$ sm2uploader.py /path/to/file
+$ sm2uploader /path/to/code-file1 /path/to/code-file2
 Discovering ...
+Use the arrow keys to navigate: ↓ ↑ → ←
+? Found 2 machines:
+  ▸ Snapmaker-3DP-A350 <192.168.1.20>
+    Snapmaker-CNC-A250 <192.168.1.18>
 
-Found 2 machines:
-> Snapmaker-DUMY@127.0.0.1|model:Snapmaker 2 Model A350|status:IDLE [ip: 10.0.1.28]
-> Snapmaker-A350@10.0.1.27|model:Snapmaker 2 Model A350|status:IDLE [ip: 10.0.1.27]
-
-Use 'sm2uploader.py /path/to/file ip' to specify the target machine
-
-$ sm2uploader.py /path/to/file
-Discovering ...
-
-IP Address	: 10.0.1.27
-Token		: 406fa8be-3853-44eb-a8e7-210871733b21
-Payload		: file
-Payload size(b)	: 37517
-
-Sending ... Success ✅
-Start print this file on the touchscreen.
-
-$ sm2uploader.py /path/to/file 10.0.1.27
-IP Address	: 10.0.1.27
-Token		: 406fa8be-3853-44eb-a8e7-210871733b21
-Payload		: file
-Payload size(b)	: 37517
-
-Sending ... Success ✅
-Start print this file on the touchscreen.
+IP Address : 192.168.1.20
+Token      : 2661c897-8b08-458b-a3b1-7b1b9063a61d
+code-file1 100% |███████████████████████████████████████████████████████████████| (14/14 MB, 1.788 MB/s)
+code-file2  84% |████████████████████████████████████████████████████           | (12/14 MB, 1.874 MB/s) [6s:1s]
 ```
