@@ -9,7 +9,7 @@ A command-line tool for send the gcode file to Snapmaker 2 via WiFi connection.
 ## Usage:
 Download [sm2uploader-{platform}-{arch}](https://github.com/macdylan/sm2uploader/releases/tag/go1.0)
   - Linux/macOS: `chmod +x sm2uploader`
-  - Win: add prefix `.exe` that you can drag and drop files into icon to quick start
+  - Win: add suffix `.exe` that you can drag and drop files into icon to quick start
 
 ```
 $ sm2uploader /path/to/code-file1 /path/to/code-file2
