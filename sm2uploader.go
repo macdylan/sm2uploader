@@ -9,9 +9,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/imroc/req/v3"
 	"github.com/manifoldco/promptui"
-	"github.com/schollz/progressbar/v3"
+	"github.com/vbauerster/mpb/v7"
+	"github.com/vbauerster/mpb/v7/decor"
 )
 
 var (
@@ -60,17 +60,31 @@ func loop() {
 				uploading = true
 				defer func() { uploading = false }()
 
-				for _, p := range _Payloads {
+				pbar := mpb.New(mpb.WithRefreshRate(100 * time.Millisecond))
+				bar := make([]*mpb.Bar, len(_Payloads))
+				names := make([]string, len(_Payloads))
+				for n, p := range _Payloads {
 					st, _ := p.Stat()
 					name := st.Name()
 					if name == "stdin" {
 						name = fmt.Sprintf("%d.gcode", time.Now().Unix())
 					}
-					pbar := progressbar.DefaultBytes(st.Size(), name)
-					_Conn.UploadCallback = func(i req.UploadInfo) { pbar.Set64(i.UploadedSize) }
-					_Conn.Upload(name, p)
-					pbar.Finish()
+					bar[n] = pbar.AddBar(st.Size(),
+						mpb.BarFillerClearOnComplete(),
+						mpb.PrependDecorators(
+							decor.Name(name),
+							decor.CountersKibiByte("% .2f / % .2f", decor.WCSyncSpace),
+						),
+						mpb.AppendDecorators(
+							decor.OnComplete(decor.Percentage(decor.WCSyncSpace), ""),
+						),
+					)
+					names[n] = name
 				}
+				for n, p := range _Payloads {
+					_Conn.Upload(names[n], bar[n].ProxyReader(p))
+				}
+				pbar.Wait()
 			}()
 
 		case state := <-_Conn.State:

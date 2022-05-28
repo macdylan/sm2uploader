@@ -3,8 +3,8 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net"
-	"os"
 	"time"
 
 	"github.com/imroc/req/v3"
@@ -35,14 +35,12 @@ const (
 )
 
 type Connector struct {
-	Target         *Machine
-	State          chan ConnectorState
-	Error          error // last error
-	UploadCallback func(req.UploadInfo)
-	PrintCallback  func()
-	ToolHead       int
-	client         *req.Client
-	cancel         chan bool
+	Target   *Machine
+	State    chan ConnectorState
+	Error    error // last error
+	ToolHead int
+	client   *req.Client
+	cancel   chan bool
 }
 
 func NewConnector() *Connector {
@@ -54,12 +52,11 @@ func NewConnector() *Connector {
 	// client.EnableDumpAll()
 
 	return &Connector{
-		State:          make(chan ConnectorState, 1),
-		Target:         nil,
-		Error:          nil,
-		UploadCallback: nil,
-		client:         client,
-		cancel:         make(chan bool, 1),
+		State:  make(chan ConnectorState, 1),
+		Target: nil,
+		Error:  nil,
+		client: client,
+		cancel: make(chan bool, 1),
 	}
 }
 
@@ -123,17 +120,21 @@ func (conn *Connector) Discover(timeout time.Duration) <-chan *Machine {
 }
 
 func (conn *Connector) request(timeout ...int) *req.Request {
+	conn.Error = nil // reset
+
 	t := 0
 	if len(timeout) > 0 {
 		t = timeout[0]
 	}
+	params := map[string]string{
+		"token": conn.Target.Token,
+		"_":     fmt.Sprintf("%d", time.Now().Unix()),
+	}
 	req := conn.client.SetTimeout(time.Duration(t) * time.Second).R()
-	// for POST
-	req.SetFormData(map[string]string{"token": conn.Target.Token})
 	// for GET
-	req.SetQueryParam("token", conn.Target.Token)
-	// no cache
-	req.SetQueryParam("_", fmt.Sprintf("%d", time.Now().Unix()))
+	req.SetQueryParams(params)
+	// for POST
+	req.SetFormData(params)
 	return req
 }
 
@@ -209,7 +210,7 @@ func (conn *Connector) startHeartbeat() {
 		case 204:
 			conn.setState(ConnectorStateWaiting)
 		default:
-			conn.broken("Machine was not connected")
+			conn.broken("Disconnected from Snapmaker 2.")
 			return
 		}
 
@@ -222,19 +223,18 @@ func (conn *Connector) startHeartbeat() {
 	}
 }
 
-func (conn *Connector) Upload(name string, file *os.File) {
+func (conn *Connector) Upload(name string, file io.Reader) {
 	url := conn.Target.URL("/upload")
-	r := conn.request(60)
-	r.SetUploadCallback(conn.UploadCallback)
-	r.SetFileReader("file", name, file)
+	r := conn.request(300).SetFileReader("file", name, file)
 	conn.do(r.Post, url, ConnectorStateUploaded)
 }
 
+/*
 func (conn *Connector) PreparePrint(name string, file *os.File) {
 	url := conn.Target.URL("/prepare_print")
 	r := conn.request(60)
 	r.SetFormData(map[string]string{"type": "3DP"})
-	r.SetUploadCallback(conn.UploadCallback)
+	r.SetUploadCallbackWithInterval(conn.UploadCallback, 50*time.Millisecond)
 	r.SetFileReader("file", name, file)
 	conn.do(r.Post, url, ConnectorStatePrintingPrepared)
 }
@@ -248,6 +248,7 @@ func (conn *Connector) StopPrint() {
 	url := conn.Target.URL("/stop_print")
 	conn.do(conn.request(5).Post, url, ConnectorStatePrintStopped)
 }
+*/
 
 func (conn *Connector) do(req func(string) (*req.Response, error), url string, state ConnectorState) {
 	if resp, err := req(url); err != nil {
