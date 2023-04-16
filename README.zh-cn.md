@@ -11,7 +11,7 @@ Luban 和 Cura with SnapmakerPlugin 对于新手很友好，但是我的大部�
 - 支持 macOS/Windows/Linux/RaspberryPi 多个平台
 
 ## 使用方法
-下载适用的[程序文件](https://github.com/macdylan/sm2uploader/release)
+下载适用的[程序文件](https://github.com/macdylan/sm2uploader/releases)
   - Linux/macOS 下，可能需要赋予可执行权限 `chmod +x sm2uploader`
 
 ```
