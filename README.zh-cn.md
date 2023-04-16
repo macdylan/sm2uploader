@@ -34,3 +34,8 @@ Upload finished.
 如果 `host` 被发现过或者连接过，它会存在于 `knownhosts` 中，直接使用 id 进行连接会更加简洁: `sm2uploader -host A350-3DP /file.gcode`
 
 更多参数：`sm2uploader -h`
+
+## 在 macOS 系统提示文件无法打开的解决方法
+macOS 不允许直接打开未经数字签名的程序，参考解决方案: https://osxdaily.com/2012/07/27/app-cant-be-opened-because-it-is-from-an-unidentified-developer/
+
+也可以直接在终端执行 `xattr -d com.apple.quarantine sm2uploader-darwin`

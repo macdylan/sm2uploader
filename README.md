@@ -33,3 +33,10 @@ If UDP Discover can not work, use `sm2uploader -host 192.168.1.20 /file.gcode` t
 If `host` in `knownhosts`, `-host printer-id` is very convenient.
 
 Get help: `sm2uploader -h`
+
+## Fix the "can not be opened because it is from an unidentified developer"
+
+Solution: https://osxdaily.com/2012/07/27/app-cant-be-opened-because-it-is-from-an-unidentified-developer/
+
+or:
+`xattr -d com.apple.quarantine sm2uploader-darwin`
