@@ -12,7 +12,7 @@ SRC = $(shell ls *.go | grep -v _test.go)
 .PHONY: all clean dep darwin-arm64 darwin-amd64 linux-amd64 linux-arm7 win64
 
 darwin-arm64: $(SRC)
-	GOOS=darwin GOARCH=amd64 $(CMD) -o $(DIST)$(NAME)-$@ $^
+	GOOS=darwin GOARCH=arm64 $(CMD) -o $(DIST)$(NAME)-$@ $^
 
 darwin-amd64: $(SRC)
 	GOOS=darwin GOARCH=amd64 $(CMD) -o $(DIST)$(NAME)-$@ $^
