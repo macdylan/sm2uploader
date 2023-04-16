@@ -32,5 +32,10 @@ dep: # Get the dependencies
 all: dep darwin-arm64 darwin-amd64 linux-amd64 linux-arm7 win64
 	@true
 
+all-zip: all
+	for p in darwin-arm64 darwin-amd64 linux-amd64 linux-arm7 win64.exe; do \
+		zip -j $(DIST)$(NAME)-$$p.zip $(DIST)$(NAME)-$$p README.md README.zh-cn.md LICENSE; \
+	done	
+
 clean:
 	rm -f $(DIST)$(NAME)-*
