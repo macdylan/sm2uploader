@@ -30,7 +30,8 @@ func main() {
 	}()
 
 	// 获取程序所在目录
-	dir, err := filepath.Abs(filepath.Dir(os.Args[0]))
+	ex, _ := os.Executable()
+	dir, err := filepath.Abs(filepath.Dir(ex))
 	if err != nil {
 		log.Panicln(err)
 	}
