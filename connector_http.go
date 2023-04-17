@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"time"
@@ -87,7 +89,7 @@ func (hc *HTTPConnector) Disconnect() (err error) {
 	return
 }
 
-func (hc *HTTPConnector) Upload(fpath string) (err error) {
+func (hc *HTTPConnector) Upload(fname string, content []byte) (err error) {
 	finished := make(chan bool, 1)
 	defer func() {
 		finished <- true
@@ -105,24 +107,30 @@ func (hc *HTTPConnector) Upload(fpath string) (err error) {
 		}
 	}()
 
+	file := req.FileUpload{
+		ParamName: "file",
+		FileName:  fname,
+		GetFileContent: func() (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(content)), nil
+		},
+		FileSize: int64(len(content)),
+	}
+
 	w := uilive.New()
 	w.Start()
 	defer w.Stop()
-	req := hc.request(0).SetFile("file", fpath).SetUploadCallback(func(i req.UploadInfo) {
+	req := hc.request(0).SetFileUpload(file).SetUploadCallback(func(info req.UploadInfo) {
 		log.SetOutput(w)
 		defer log.SetOutput(os.Stderr)
-		hc.progress(i)
+
+		perc := float64(info.UploadedSize) / float64(info.FileSize) * 100.0
+		log.Printf("  - HTTP sending %.1f%%", perc)
 	})
 
 	// disable chucked to make Content-Length
 	// req.DisableForceChunkedEncoding()
 	_, err = req.Post(hc.URL("/upload"))
 	return
-}
-
-func (hc *HTTPConnector) progress(info req.UploadInfo) {
-	perc := float64(info.UploadedSize) / float64(info.FileSize) * 100.0
-	log.Printf("  - HTTP sending %.1f%%", perc)
 }
 
 func (hc *HTTPConnector) request(timeout ...int) *req.Request {

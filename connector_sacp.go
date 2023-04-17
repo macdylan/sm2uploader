@@ -4,7 +4,6 @@ import (
 	"log"
 	"net"
 	"os"
-	"path"
 	"time"
 
 	"github.com/gosuri/uilive"
@@ -43,13 +42,7 @@ func (sc *SACPConnector) Disconnect() error {
 	return nil
 }
 
-func (sc *SACPConnector) Upload(fpath string) (err error) {
-	data, err := os.ReadFile(fpath)
-	if err != nil {
-		return err
-	}
-	fname := path.Base(fpath)
-
+func (sc *SACPConnector) Upload(fname string, content []byte) (err error) {
 	w := uilive.New()
 	w.Start()
 	log.SetOutput(w)
@@ -58,7 +51,7 @@ func (sc *SACPConnector) Upload(fpath string) (err error) {
 		log.SetOutput(os.Stderr)
 	}()
 
-	err = SACP_start_upload(sc.conn, fname, data, SACPTimeout*time.Second)
+	err = SACP_start_upload(sc.conn, fname, content, SACPTimeout*time.Second)
 	return
 }
 

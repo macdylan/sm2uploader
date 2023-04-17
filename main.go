@@ -2,20 +2,22 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"log"
 	"os"
+	"os/signal"
 	"path"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/manifoldco/promptui"
 )
 
 var (
-	Host            string
-	KnownHosts      string
-	DiscoverTimeout time.Duration
+	Host                string
+	KnownHosts          string
+	DiscoverTimeout     time.Duration
+	OctoPrintListenAddr string
 
 	_Payloads []string
 )
@@ -37,29 +39,10 @@ func main() {
 	flag.StringVar(&Host, "host", "", "upload to host(id/ip/hostname), not required.")
 	flag.StringVar(&KnownHosts, "knownhosts", defaultKnownHosts, "known hosts")
 	flag.DurationVar(&DiscoverTimeout, "timeout", time.Second*4, "printer discovery timeout")
+	flag.StringVar(&OctoPrintListenAddr, "octoprint", "", "octoprint listen address, e.g. '-octoprint :8844' then you can upload files to printer by http://localhost:8844")
 
 	flag.Usage = flag_usage
 	flag.Parse()
-
-	args := flag.Args()
-	// prusaslicer
-	if outputName := os.Getenv("SLIC3R_PP_OUTPUT_NAME"); outputName != "" {
-		args = []string{outputName}
-	}
-
-	// 检查这些文件参数是否存在
-	for _, file := range args {
-		if _, err := os.Stat(file); os.IsNotExist(err) {
-			log.Panicf("File %s does not exist\n", file)
-		} else {
-			_Payloads = append(_Payloads, file)
-		}
-	}
-
-	// 检查是否有传入的文件
-	if len(_Payloads) == 0 {
-		log.Panicln("No input files")
-	}
 
 	var printer *Printer
 	ls := NewLocalStorage(KnownHosts)
@@ -120,29 +103,56 @@ func main() {
 		log.Println("Printer Model:", printer.Model)
 	}
 
+	// Create a channel to listen for signals
+	sc := make(chan os.Signal, 1)
+	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	go func() {
+		sig := <-sc
+		log.Printf("Received signal: %s", sig)
+		// update printer's token
+		if printer != nil {
+			ls.Add(printer)
+		}
+		ls.Save()
+		os.Exit(0)
+	}()
+
+	if OctoPrintListenAddr != "" {
+		// listen for octoprint uploads
+		if err := startOctoPrintServer(OctoPrintListenAddr, printer); err != nil {
+			log.Panic(err)
+		}
+		return
+	}
+
+	// 检查文件参数是否存在
+	for _, file := range flag.Args() {
+		if _, err := os.Stat(file); os.IsNotExist(err) {
+			log.Panicf("File %s does not exist\n", file)
+		} else {
+			_Payloads = append(_Payloads, file)
+		}
+	}
+
+	// 检查是否有传入的文件
+	if len(_Payloads) == 0 {
+		log.Panicln("No input files")
+	}
+
 	// Upload files to host
 	for _, filepath := range _Payloads {
+		content, err := os.ReadFile(filepath)
+		if err != nil {
+			log.Panicln(err)
+		}
 		st, _ := os.Stat(filepath)
-		fname := path.Base(filepath)
+		fname := normalizedFilename(path.Base(filepath))
 		log.Printf("Uploading file '%s' [%s]...", fname, humanReadableSize(st.Size()))
-		if err := Connector.Upload(printer, filepath); err != nil {
+		if err := Connector.Upload(printer, fname, content); err != nil {
 			log.Panicln(err)
 		} else {
 			log.Println("Upload finished.")
 			<-time.After(time.Second * 1)
 		}
 	}
-}
-
-func humanReadableSize(size int64) string {
-	const unit = 1024
-	if size < unit {
-		return fmt.Sprintf("%d B", size)
-	}
-	div, exp := int64(unit), 0
-	for n := size / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %cB", float64(size)/float64(div), "KMGTPE"[exp])
 }
