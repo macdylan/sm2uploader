@@ -7,6 +7,7 @@ Luban 和 Cura with SnapmakerPlugin 对于新手很友好，但是我的大部�
 ## 功能
 - 支持 Snapmaker 2 A/J1/Artisan 全系列打印机
 - 自动发现局域网内所有的 Snapmaker 打印机（和 Luban 相同的协议，使用 UDP 广播）
+- 模拟 OctoPrint Server，这样就可以在各种切片软件，比如 Cura/PrusaSlicer/SuperSlicer/ideaMaker 中向 Snapmaker 打印机发送文件
 - Snapmaker 2 A-Series 第一次连接时需要授权，之后可以直接一步上传
 - 支持 macOS/Windows/Linux/RaspberryPi 多个平台
 
@@ -15,18 +16,48 @@ Luban 和 Cura with SnapmakerPlugin 对于新手很友好，但是我的大部�
   - Linux/macOS 下，可能需要赋予可执行权限 `chmod +x sm2uploader`
 
 ```
+## 自动查找模式
 $ sm2uploader /path/to/code-file1 /path/to/code-file2
 Discovering ...
 Use the arrow keys to navigate: ↓ ↑ → ←
-? Found 2 machines:
-  ▸ A350-3DP@192.168.1.20 - Snapmaker 2 Model A350
-    A250-CNC@192.168.1.18 - Snapmaker 2 Model A250
-    J1V19@192.168.1.19 - Snapmaker J1
-Printer IP: 192.168.1.20
+? Found 3 machines:
+  ▸ A350-3DP@192.168.1.20 - Snapmaker A350
+    A250-CNC@192.168.1.18 - Snapmaker A250
+    J1V19@192.168.1.19 - Snapmaker-J1
+Printer IP: 192.168.1.19
 Printer Model: Snapmaker J1
 Uploading file 'code-file1' [1.2 MB]...
   - SACP sending 100%
 Upload finished.
+
+## 指定 IP 连接模式
+$ sm2uploader -host 192.168.1.19 /path/to/code-file1 /path/to/code-file2
+Printer IP: 192.168.1.19
+Printer Model: Snapmaker J1
+Uploading file 'code-file1' [1.2 MB]...
+  - SACP sending 100%
+Upload finished.
+
+## 指定打印机名字进行连接
+$ sm2uploader -host J1V19 /path/to/code-file1 /path/to/code-file2
+Discovering ...
+Printer IP: 192.168.1.19
+Printer Model: Snapmaker J1
+Uploading file 'code-file1' [1.2 MB]...
+  - SACP sending 100%
+Upload finished.
+
+## 模拟 OctoPrint (CTRL-C 终止运行)
+$ sm2uploader -octoprint :8844 -host A350
+Printer IP: 192.168.1.20
+Printer Model: Snapmaker 2 Model A350
+Starting OctoPrint server on :8844 ...
+Server started, now you can upload files to http://localhost:8844
+Request GET /api/version completed in 6.334µs
+  - HTTP sending 100.0%
+Upload finished: model.gcode [382.2 KB]
+Request POST /api/files/local completed in 951.080458ms
+...
 ```
 
 打印机的 UDP 应答服务有时会挂掉，通常需要重启打印机来解决。或者你可以直接指定目标IP: `sm2uploader -host 192.168.1.20 /file.gcode`
