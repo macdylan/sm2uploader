@@ -140,6 +140,9 @@ func main() {
 		log.Panicln("No input files")
 	}
 
+	// 从 slic3r 环境变量中获取文件名
+	envFilename := os.Getenv("SLIC3R_PP_OUTPUT_NAME")
+
 	// Upload files to host
 	for _, filepath := range _Payloads {
 		content, err := os.ReadFile(filepath)
@@ -147,13 +150,18 @@ func main() {
 			log.Panicln(err)
 		}
 		st, _ := os.Stat(filepath)
-		fname := normalizedFilename(path.Base(filepath))
+		var fname string
+		if envFilename == "" {
+			fname = normalizedFilename(path.Base(filepath))
+		} else {
+			fname = normalizedFilename(path.Base(envFilename))
+		}
 		log.Printf("Uploading file '%s' [%s]...", fname, humanReadableSize(st.Size()))
 		if err := Connector.Upload(printer, fname, content); err != nil {
 			log.Panicln(err)
 		} else {
 			log.Println("Upload finished.")
-			<-time.After(time.Second * 1)
+			<-time.After(time.Second * 1) // HMI needs some time to refresh
 		}
 	}
 }

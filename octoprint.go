@@ -1,12 +1,10 @@
 package main
 
 import (
-	"fmt"
 	"io"
 	"log"
 	"net"
 	"net/http"
-	"strings"
 	"time"
 )
 
@@ -53,6 +51,7 @@ func startOctoPrintServer(listenAddr string, printer *Printer) error {
 
 		// Return success response
 		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"done": true}`))
 	})
 
 	handler := LoggingMiddleware(mux)
@@ -65,11 +64,7 @@ func startOctoPrintServer(listenAddr string, printer *Printer) error {
 		return err
 	}
 
-	endpoint := "http://" + listenAddr
-	if strings.Index(listenAddr, ":") == 0 {
-		endpoint = fmt.Sprintf("http://localhost%s", listenAddr)
-	}
-	log.Printf("Server started, now you can upload files to %s", endpoint)
+	log.Printf("Server started, now you can upload files to http://%s", listener.Addr().String())
 
 	// Start the server
 	return http.Serve(listener, handler)
