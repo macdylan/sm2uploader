@@ -62,7 +62,7 @@ func (sacp SACP_pack) Encode() []byte {
 		copy(result[13:], sacp.Data)
 	}
 
-	binary.LittleEndian.PutUint16(result[len(result)-2:], sacp.U16Chksum(result[7:], len(sacp.Data)+6))
+	binary.LittleEndian.PutUint16(result[len(result)-2:], sacp.U16Chksum(result[7:], uint16(len(sacp.Data))+6))
 
 	return result[:]
 }
@@ -71,11 +71,11 @@ func (sacp *SACP_pack) Decode(data []byte) error {
 	if len(data) < 13 {
 		return errInvalidSize
 	}
-	if data[0] != 0xAA || data[1] != 0x55 {
+	if data[0] != 0xAA && data[1] != 0x55 {
 		return errInvalidSACP
 	}
 	dataLen := binary.LittleEndian.Uint16(data[2:4])
-	if int(dataLen) != (len(data) - 7) {
+	if dataLen != uint16(len(data)-7) {
 		return errInvalidSize
 	}
 	if data[4] != 0x01 {
@@ -84,7 +84,7 @@ func (sacp *SACP_pack) Decode(data []byte) error {
 	if sacp.headChksum(data[:6]) != data[6] {
 		return errInvalidChksum
 	}
-	if binary.LittleEndian.Uint16(data[len(data)-2:]) != sacp.U16Chksum(data[7:], int(dataLen)-2) {
+	if binary.LittleEndian.Uint16(data[len(data)-2:]) != sacp.U16Chksum(data[7:], dataLen-2) {
 		return errInvalidChksum
 	}
 
@@ -100,31 +100,31 @@ func (sacp *SACP_pack) Decode(data []byte) error {
 }
 
 func (sacp *SACP_pack) headChksum(data []byte) byte {
-	crc := 0
-	poly := 7
+	crc := byte(0)
+	poly := byte(7)
 	for i := 0; i < len(data); i++ {
 		for j := 0; j < 8; j++ {
-			bit := data[i]&255>>(7-j)&1 == 1
-			c07 := crc>>7&1 == 1
+			bit := ((data[i] & 0xff) >> (7 - j) & 0x01) == 1
+			c07 := (crc >> 7 & 0x01) == 1
 			crc = crc << 1
 			if (!c07 && bit) || (c07 && !bit) {
 				crc ^= poly
 			}
 		}
 	}
-	crc = crc & 255
-	return byte(crc)
+	crc = crc & 0xff
+	return crc
 }
 
-func (sacp *SACP_pack) U16Chksum(package_data []byte, length int) uint16 {
-	check_num := uint64(0)
+func (sacp *SACP_pack) U16Chksum(package_data []byte, length uint16) uint16 {
+	check_num := uint32(0)
 	if length > 0 {
-		for i := 0; i < length-1; i += 2 {
-			check_num += uint64(package_data[i])<<8 | uint64(package_data[i+1])
-			check_num &= 0xffffffff // TODO: maybe just use uint32?
+		for i := 0; i < int(length-1); i += 2 {
+			check_num += uint32((uint32(package_data[i])&0xff)<<8 | uint32(package_data[i+1])&0xff)
+			check_num &= 0xffffffff
 		}
 		if length%2 != 0 {
-			check_num += uint64(package_data[length-1])
+			check_num += uint32(package_data[length-1])
 		}
 	}
 	for check_num > 0xFFFF {
@@ -196,21 +196,26 @@ func SACP_connect(ip string, timeout time.Duration) (net.Conn, error) {
 }
 
 func SACP_read(conn net.Conn, timeout time.Duration) (*SACP_pack, error) {
-
 	var buf [SACP_data_len + 15]byte
 
 	deadline := time.Now().Add(timeout)
 	conn.SetReadDeadline(deadline)
 
 	n, err := conn.Read(buf[:4])
-	if err != nil || n != 4 {
+	if err != nil {
 		return nil, err
+	}
+	if n != 4 {
+		return nil, errInvalidSize
 	}
 
 	dataLen := binary.LittleEndian.Uint16(buf[2:4])
 	n, err = conn.Read(buf[4 : dataLen+7])
-	if err != nil || n != int(dataLen+3) {
+	if err != nil {
 		return nil, err
+	}
+	if n != int(dataLen+3) {
+		return nil, errInvalidSize
 	}
 
 	var sacp SACP_pack

@@ -27,6 +27,7 @@ func startOctoPrintServer(listenAddr string, printer *Printer) error {
 	mux.HandleFunc("/api/files/local", func(w http.ResponseWriter, r *http.Request) {
 		// Check if request is a POST request
 		if r.Method != http.MethodPost {
+			log.Print("Method not allowed: ", r.Method)
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
@@ -34,6 +35,7 @@ func startOctoPrintServer(listenAddr string, printer *Printer) error {
 		// Retrieve the uploaded file
 		file, fd, err := r.FormFile("file")
 		if err != nil {
+			log.Print("Error retrieving file: ", err.Error())
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -43,6 +45,7 @@ func startOctoPrintServer(listenAddr string, printer *Printer) error {
 		// Send the stream to the printer
 		content, _ := io.ReadAll(file)
 		if err := Connector.Upload(printer, fd.Filename, content); err != nil {
+			log.Print("Error uploading file: ", err.Error())
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}

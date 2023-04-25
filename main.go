@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"path"
 	"path/filepath"
 	"syscall"
 	"time"
@@ -144,17 +143,17 @@ func main() {
 	envFilename := os.Getenv("SLIC3R_PP_OUTPUT_NAME")
 
 	// Upload files to host
-	for _, filepath := range _Payloads {
-		content, err := os.ReadFile(filepath)
+	for _, fpath := range _Payloads {
+		content, err := os.ReadFile(fpath)
 		if err != nil {
 			log.Panicln(err)
 		}
-		st, _ := os.Stat(filepath)
+		st, _ := os.Stat(fpath)
 		var fname string
 		if envFilename == "" {
-			fname = normalizedFilename(path.Base(filepath))
+			fname = normalizedFilename(filepath.Base(fpath))
 		} else {
-			fname = normalizedFilename(path.Base(envFilename))
+			fname = normalizedFilename(filepath.Base(envFilename))
 		}
 		log.Printf("Uploading file '%s' [%s]...", fname, humanReadableSize(st.Size()))
 		if err := Connector.Upload(printer, fname, content); err != nil {

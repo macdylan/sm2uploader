@@ -32,13 +32,17 @@ func (sc *SACPConnector) Ping(p *Printer) bool {
 }
 
 func (sc *SACPConnector) Connect() (err error) {
-	if conn, err := SACP_connect(sc.printer.IP, SACPTimeout*time.Second); err == nil {
+	conn, err := SACP_connect(sc.printer.IP, SACPTimeout*time.Second)
+	if conn != nil {
 		sc.conn = conn
 	}
-	return
+	return err
 }
 
 func (sc *SACPConnector) Disconnect() error {
+	if sc.conn != nil {
+		sc.conn.Close()
+	}
 	return nil
 }
 
