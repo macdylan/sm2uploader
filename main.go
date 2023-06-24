@@ -17,6 +17,8 @@ var (
 	KnownHosts          string
 	DiscoverTimeout     time.Duration
 	OctoPrintListenAddr string
+	SmFixPath           string
+	Debug               bool
 
 	_Payloads []string
 )
@@ -27,6 +29,8 @@ func main() {
 			os.Exit(2)
 		}
 	}()
+
+	Debug = os.Getenv("DEBUG") != ""
 
 	// 获取程序所在目录
 	ex, _ := os.Executable()
@@ -40,9 +44,20 @@ func main() {
 	flag.StringVar(&KnownHosts, "knownhosts", defaultKnownHosts, "known hosts")
 	flag.DurationVar(&DiscoverTimeout, "timeout", time.Second*4, "printer discovery timeout")
 	flag.StringVar(&OctoPrintListenAddr, "octoprint", "", "octoprint listen address, e.g. '-octoprint :8844' then you can upload files to printer by http://localhost:8844")
+	flag.StringVar(&SmFixPath, "smfix", "", "specify the absolute path for SMFix(https://github.com/macdylan/SMFix). if not specified, it will search in the current directory.")
+	flag.BoolVar(&Debug, "debug", false, "debug mode")
 
 	flag.Usage = flag_usage
 	flag.Parse()
+
+	if Debug {
+		log.Println("-- Debug mode")
+	}
+
+	if SmFixPath == "" {
+		SmFixPath, _ = searchInDir("smfix", dir)
+	}
+	log.Println("SMFix:", SmFixPath)
 
 	var printer *Printer
 	ls := NewLocalStorage(KnownHosts)
@@ -50,8 +65,13 @@ func main() {
 		if printer != nil {
 			// update printer's token
 			ls.Add(printer)
+			if Debug {
+				log.Printf("-- Updated printer: %s", printer.String())
+			}
 		}
-		ls.Save()
+		if err := ls.Save(); err == nil && Debug {
+			log.Printf("-- Saved known hosts: %s", KnownHosts)
+		}
 	}()
 
 	// Check if host is specified
@@ -64,7 +84,12 @@ func main() {
 	if printer == nil {
 		log.Println("Discovering ...")
 		if printers, err := Discover(DiscoverTimeout); err == nil {
+			if Debug {
+				log.Printf("-- Discovered %d printers", len(printers))
+			}
 			ls.Add(printers...)
+		} else if Debug {
+			log.Printf("-- Discover error: %s", err.Error())
 		}
 		printer = ls.Find(Host)
 		if printer != nil {
@@ -112,8 +137,13 @@ func main() {
 		// update printer's token
 		if printer != nil {
 			ls.Add(printer)
+			if Debug {
+				log.Printf("-- Updated printer: %s", printer.String())
+			}
 		}
-		ls.Save()
+		if err := ls.Save(); err == nil && Debug {
+			log.Printf("-- Saved known hosts: %s", KnownHosts)
+		}
 		os.Exit(0)
 	}()
 
@@ -144,6 +174,11 @@ func main() {
 
 	// Upload files to host
 	for _, fpath := range _Payloads {
+		if SmFixPath != "" {
+			if err := postprocessGcodeFile(SmFixPath, fpath); err != nil {
+				log.Panicln("SMFix error:", err)
+			}
+		}
 		content, err := os.ReadFile(fpath)
 		if err != nil {
 			log.Panicln(err)

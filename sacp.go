@@ -184,13 +184,19 @@ func SACP_connect(ip string, timeout time.Duration) (net.Conn, error) {
 		return nil, err
 	}
 
+	if Debug {
+		log.Printf("-- SACP_connect got:\n%v", p)
+	}
+
 	if !(p.CommandSet == 1 && p.CommandID == 5) {
 		// log.Printf("Got command set/id %d/%d but expected 1/5", p.CommandSet, p.CommandID)
 		conn.Close()
 		return nil, fmt.Errorf("got command set/id %d/%d but expected 1/5", p.CommandSet, p.CommandID)
 	}
 
-	// log.Println("Connected to printer")
+	if Debug {
+		log.Println("-- Connected to printer")
+	}
 
 	return conn, nil
 }
@@ -236,7 +242,9 @@ func SACP_start_upload(conn net.Conn, filename string, gcode []byte, timeout tim
 	writeLE(&data, package_count)
 	writeSACPstring(&data, hex.EncodeToString(md5hash[:]))
 
-	// log.Println("Starting upload...")
+	if Debug {
+		log.Println("-- Starting upload ...")
+	}
 
 	conn.SetWriteDeadline(time.Now().Add(timeout))
 	_, err := conn.Write(SACP_pack{
@@ -265,7 +273,9 @@ func SACP_start_upload(conn net.Conn, filename string, gcode []byte, timeout tim
 			return errInvalidSize
 		}
 
-		// log.Printf("DEBUG: Got reply from printer: %v", p)
+		if Debug {
+			log.Printf("-- Got reply from printer: %v", p)
+		}
 
 		switch {
 		case p.CommandSet == 0xb0 && p.CommandID == 0:
@@ -318,7 +328,9 @@ func SACP_start_upload(conn net.Conn, filename string, gcode []byte, timeout tim
 			// send finished!!!
 			if len(p.Data) == 1 && p.Data[0] == 0 {
 
-				// log.Print("Upload finished")
+				if Debug {
+					log.Print("-- Upload finished")
+				}
 
 				conn.SetWriteDeadline(time.Now().Add(timeout))
 				_, err := conn.Write(SACP_pack{

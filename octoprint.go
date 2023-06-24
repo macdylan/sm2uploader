@@ -2,18 +2,25 @@ package main
 
 import (
 	"io"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"time"
+)
+
+const (
+	maxMemory = 64 << 20 // 64MB
 )
 
 func LoggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
+		defer func() {
+			log.Printf("Request %s %s completed in %v", r.Method, r.URL.Path, time.Since(start))
+		}()
 		next.ServeHTTP(w, r)
-		// Log the request
-		log.Printf("Request %s %s completed in %v", r.Method, r.URL.Path, time.Since(start))
 	})
 }
 
@@ -32,6 +39,12 @@ func startOctoPrintServer(listenAddr string, printer *Printer) error {
 			return
 		}
 
+		if err := r.ParseMultipartForm(maxMemory); err != nil {
+			log.Print("Parse form error: ", err.Error())
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
 		// Retrieve the uploaded file
 		file, fd, err := r.FormFile("file")
 		if err != nil {
@@ -42,8 +55,34 @@ func startOctoPrintServer(listenAddr string, printer *Printer) error {
 		defer file.Close()
 		fd.Filename = normalizedFilename(fd.Filename)
 
+		var content []byte
+		if SmFixPath != "" {
+			// tmpfile for post-process
+			tmpFile, err := os.CreateTemp("", "smup-*.tmp")
+			if err != nil {
+				log.Print("tmp file error:", err.Error())
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			defer os.Remove(tmpFile.Name())
+
+			if _, err := io.Copy(tmpFile, file); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			tmpFile.Close()
+
+			// post process
+			if err := postprocessGcodeFile(SmFixPath, tmpFile.Name()); err != nil {
+				http.Error(w, "SMFix error: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+			content, _ = ioutil.ReadFile(tmpFile.Name())
+		} else {
+			content, _ = io.ReadAll(file)
+		}
+
 		// Send the stream to the printer
-		content, _ := io.ReadAll(file)
 		if err := Connector.Upload(printer, fd.Filename, content); err != nil {
 			log.Print("Error uploading file: ", err.Error())
 			http.Error(w, err.Error(), http.StatusInternalServerError)

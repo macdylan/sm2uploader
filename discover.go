@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"net"
 	"time"
 )
@@ -48,6 +49,10 @@ func Discover(timeout time.Duration) ([]*Printer, error) {
 				break
 			}
 			return nil, err
+		}
+
+		if Debug {
+			log.Printf("-- Discover got %d bytes %s", n, buf[:n])
 		}
 
 		// Parse the response into a Printer object

@@ -44,11 +44,29 @@ func (hc *HTTPConnector) Connect() error {
 	hc.client.DisableAllowGetMethodPayload()
 	// hc.client.EnableDumpAllWithoutRequestBody()
 
-	type resp_data struct {
+	result := struct {
 		Token string `json:"token"`
-	}
-	result := &resp_data{}
-	resp, err := hc.request().SetSuccessResult(result).Post(hc.URL("/connect"))
+	}{}
+
+	req := hc.request().
+		SetSuccessResult(&result).
+		SetRetryCount(3).
+		SetRetryFixedInterval(1 * time.Second).
+		SetRetryCondition(func(r *req.Response, err error) bool {
+			if Debug {
+				log.Printf("-- retrying %s -> %d, token %s", r.Request.URL, r.StatusCode, hc.printer.Token)
+			}
+
+			// token expired
+			if r.StatusCode == 403 && hc.printer.Token != "" {
+				hc.printer.Token = ""
+				// reconnect with no token to get new one
+				return true
+			}
+			return false
+		})
+
+	resp, err := req.Post(hc.URL("/connect"))
 	if err != nil {
 		return err
 	}
@@ -72,11 +90,13 @@ func (hc *HTTPConnector) Connect() error {
 				return fmt.Errorf("access denied")
 			}
 		}
-	} else if resp.StatusCode == 403 && hc.printer.Token != "" {
-		// token expired
-		hc.printer.Token = ""
-		// reconnect with no token to get new one
-		return hc.Connect()
+		/*
+			} else if resp.StatusCode == 403 && hc.printer.Token != "" {
+				// token expired
+				hc.printer.Token = ""
+				// reconnect with no token to get new one
+				return hc.Connect()
+		*/
 	}
 
 	return fmt.Errorf("connect error %d", resp.StatusCode)
@@ -90,45 +110,48 @@ func (hc *HTTPConnector) Disconnect() (err error) {
 }
 
 func (hc *HTTPConnector) Upload(fname string, content []byte) (err error) {
-	finished := make(chan bool, 1)
+	finished := make(chan empty, 1)
 	defer func() {
-		finished <- true
+		finished <- empty{}
 	}()
 	go func() {
-		ticker := time.NewTicker(3 * time.Second)
+		ticker := time.NewTicker(1 * time.Second)
 		for {
 			select {
 			case <-ticker.C:
 				hc.checkStatus()
 			case <-finished:
+				if Debug {
+					log.Printf("-- heartbeat stopped")
+				}
 				ticker.Stop()
 				return
 			}
 		}
 	}()
 
+	w := uilive.New()
+	w.Start()
+	log.SetOutput(w)
+	defer func() {
+		w.Stop()
+		log.SetOutput(os.Stderr)
+	}()
+
 	file := req.FileUpload{
 		ParamName: "file",
 		FileName:  fname,
 		GetFileContent: func() (io.ReadCloser, error) {
-			return io.NopCloser(bytes.NewReader(content)), nil
+			return io.NopCloser(bytes.NewBuffer(content)), nil
 		},
-		FileSize: int64(len(content)),
+		FileSize:    int64(len(content)),
+		ContentType: "application/octet-stream",
 	}
-
-	w := uilive.New()
-	w.Start()
-	defer w.Stop()
-	req := hc.request(0).SetFileUpload(file).SetUploadCallback(func(info req.UploadInfo) {
-		log.SetOutput(w)
-		defer log.SetOutput(os.Stderr)
-
-		perc := float64(info.UploadedSize) / float64(info.FileSize) * 100.0
+	req := hc.request(0).SetFileUpload(file).SetUploadCallbackWithInterval(func(info req.UploadInfo) {
+		perc := float64(info.UploadedSize/info.FileSize) * 100.0
 		log.Printf("  - HTTP sending %.1f%%", perc)
-	})
+	}, 35*time.Millisecond)
 
-	// disable chucked to make Content-Length
-	// req.DisableForceChunkedEncoding()
 	_, err = req.Post(hc.URL("/upload"))
 	return
 }
@@ -150,6 +173,9 @@ func (hc *HTTPConnector) request(timeout ...int) *req.Request {
 
 func (hc *HTTPConnector) checkStatus() (status int) {
 	r, err := hc.request().Get(hc.URL("/status"))
+	if Debug {
+		log.Printf("-- heartbeat: %d, err(%s)", r.StatusCode, err)
+	}
 	if err == nil {
 		switch r.StatusCode {
 		case 200:
