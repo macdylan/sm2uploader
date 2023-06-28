@@ -38,19 +38,18 @@ func searchInDir(exp string, dirpath string) (abspath string, err error) {
 
 	// check if the dir is a symbolic link
 	if dirInfo.Mode()&os.ModeSymlink != 0 {
-		dirpath, err = os.Readlink(dirpath)
+		dirpath, _ = os.Readlink(dirpath)
 	}
 
-	err = filepath.Walk(dirpath, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
+	if found, err := filepath.Glob(filepath.Join(dirpath, exp)); err == nil {
+		for _, file := range found {
+			if stat, err := os.Stat(file); err == nil && !stat.IsDir() && stat.Mode().Perm()&0100 != 0 {
+				abspath = file
+				return abspath, nil
+			}
 		}
-		if !info.IsDir() && filepath.HasPrefix(info.Name(), exp) {
-			abspath = path
-			return nil
-		}
-		return nil
-	})
+	}
+
 	return abspath, err
 }
 

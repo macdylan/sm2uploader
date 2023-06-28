@@ -55,7 +55,7 @@ func main() {
 	}
 
 	if SmFixPath == "" {
-		SmFixPath, _ = searchInDir("smfix", dir)
+		SmFixPath, _ = searchInDir("smfix*", dir)
 	}
 	log.Println("SMFix:", SmFixPath)
 
