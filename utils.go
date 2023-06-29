@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 )
 
 type empty struct{}
@@ -43,9 +44,12 @@ func searchInDir(exp string, dirpath string) (abspath string, err error) {
 
 	if found, err := filepath.Glob(filepath.Join(dirpath, exp)); err == nil {
 		for _, file := range found {
-			if stat, err := os.Stat(file); err == nil && !stat.IsDir() && stat.Mode().Perm()&0100 != 0 {
-				abspath = file
-				return abspath, nil
+			if stat, err := os.Stat(file); err == nil && !stat.IsDir() {
+				if runtime.GOOS == "windows" { // TODO: check if executable
+					return file, err
+				} else if stat.Mode().Perm()&0100 != 0 {
+					return file, err
+				}
 			}
 		}
 	}
