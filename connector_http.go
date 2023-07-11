@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -40,16 +39,12 @@ func (hc *HTTPConnector) Ping(p *Printer) bool {
 }
 
 func (hc *HTTPConnector) Connect() error {
-	hc.client = req.C()
-	hc.client.DisableAllowGetMethodPayload()
-	// hc.client.EnableDumpAllWithoutRequestBody()
-
 	result := struct {
 		Token string `json:"token"`
 	}{}
 
 	req := hc.request().
-		SetSuccessResult(&result).
+		SetResult(&result).
 		SetRetryCount(3).
 		SetRetryFixedInterval(1 * time.Second).
 		SetRetryCondition(func(r *req.Response, err error) bool {
@@ -103,19 +98,19 @@ func (hc *HTTPConnector) Connect() error {
 }
 
 func (hc *HTTPConnector) Disconnect() (err error) {
-	if hc.printer.Token != "" {
+	if hc.client != nil && hc.printer.Token != "" {
 		_, err = hc.request().Post(hc.URL("/disconnect"))
 	}
 	return
 }
 
-func (hc *HTTPConnector) Upload(fname string, content []byte) (err error) {
+func (hc *HTTPConnector) Upload(payload *Payload) (err error) {
 	finished := make(chan empty, 1)
 	defer func() {
 		finished <- empty{}
 	}()
 	go func() {
-		ticker := time.NewTicker(1 * time.Second)
+		ticker := time.NewTicker(2 * time.Second)
 		for {
 			select {
 			case <-ticker.C:
@@ -140,19 +135,40 @@ func (hc *HTTPConnector) Upload(fname string, content []byte) (err error) {
 
 	file := req.FileUpload{
 		ParamName: "file",
-		FileName:  fname,
+		FileName:  payload.Name,
 		GetFileContent: func() (io.ReadCloser, error) {
-			return io.NopCloser(bytes.NewBuffer(content)), nil
+			pr, pw := io.Pipe()
+			go func() {
+				defer pw.Close()
+				content, err := payload.GetContent(SmFix)
+				if SmFix {
+					log.SetOutput(os.Stderr)
+					if err != nil {
+						log.Printf("G-Code fix error(ignored): %s", err)
+					} else {
+						log.Printf("G-Code fixed")
+					}
+					log.SetOutput(w)
+				}
+				pw.Write(content)
+			}()
+			return pr, nil
 		},
-		FileSize:    int64(len(content)),
-		ContentType: "application/octet-stream",
+		FileSize: payload.Size,
+		// ContentType: "application/octet-stream",
 	}
-	req := hc.request(0).SetFileUpload(file).SetUploadCallbackWithInterval(func(info req.UploadInfo) {
-		perc := float64(info.UploadedSize/info.FileSize) * 100.0
-		log.Printf("  - HTTP sending %.1f%%", perc)
+	r := hc.request(0)
+	r.SetFileUpload(file)
+	r.SetUploadCallbackWithInterval(func(info req.UploadInfo) {
+		if info.FileSize > 0 {
+			perc := float64(info.UploadedSize) / float64(info.FileSize) * 100.0
+			log.Printf("  - HTTP sending %.1f%%", perc)
+		} else {
+			log.Printf("  - HTTP sending %s...", humanReadableSize(info.UploadedSize))
+		}
 	}, 35*time.Millisecond)
 
-	_, err = req.Post(hc.URL("/upload"))
+	_, err = r.Post(hc.URL("/upload"))
 	return
 }
 
@@ -161,13 +177,21 @@ func (hc *HTTPConnector) request(timeout ...int) *req.Request {
 	if len(timeout) > 0 {
 		to = timeout[0]
 	}
+
+	if hc.client == nil {
+		hc.client = req.C()
+		hc.client.DisableAllowGetMethodPayload()
+		if Debug {
+			hc.client.EnableDumpAllWithoutRequestBody()
+		}
+	}
+
 	req := hc.client.SetTimeout(time.Second * time.Duration(to)).R()
-	// for POST
-	req.SetFormData(map[string]string{"token": hc.printer.Token})
 	// for GET
 	req.SetQueryParam("token", hc.printer.Token)
-	// no cache
-	req.SetQueryParam("_", fmt.Sprintf("%d", time.Now().Unix()))
+	// for POST
+	req.SetFormData(map[string]string{"token": hc.printer.Token})
+
 	return req
 }
 

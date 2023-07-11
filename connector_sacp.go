@@ -41,12 +41,22 @@ func (sc *SACPConnector) Connect() (err error) {
 
 func (sc *SACPConnector) Disconnect() error {
 	if sc.conn != nil {
+		SACP_disconnect(sc.conn, SACPTimeout*time.Second)
 		sc.conn.Close()
 	}
 	return nil
 }
 
-func (sc *SACPConnector) Upload(fname string, content []byte) (err error) {
+func (sc *SACPConnector) Upload(payload *Payload) (err error) {
+	content, err := payload.GetContent(SmFix)
+	if SmFix {
+		if err != nil {
+			log.Printf("G-Code fix error(ignored): %s", err)
+		} else {
+			log.Printf("G-Code fixed")
+		}
+	}
+
 	w := uilive.New()
 	w.Start()
 	log.SetOutput(w)
@@ -55,7 +65,7 @@ func (sc *SACPConnector) Upload(fname string, content []byte) (err error) {
 		log.SetOutput(os.Stderr)
 	}()
 
-	err = SACP_start_upload(sc.conn, fname, content, SACPTimeout*time.Second)
+	err = SACP_start_upload(sc.conn, payload.Name, content, SACPTimeout*time.Second)
 	return
 }
 

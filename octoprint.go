@@ -1,12 +1,9 @@
 package main
 
 import (
-	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
-	"os"
 	"time"
 )
 
@@ -53,43 +50,16 @@ func startOctoPrintServer(listenAddr string, printer *Printer) error {
 			return
 		}
 		defer file.Close()
-		fd.Filename = normalizedFilename(fd.Filename)
-
-		var content []byte
-		if SmFixPath != "" {
-			// tmpfile for post-process
-			tmpFile, err := os.CreateTemp("", "smup-*.tmp")
-			if err != nil {
-				log.Print("tmp file error:", err.Error())
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			defer os.Remove(tmpFile.Name())
-
-			if _, err := io.Copy(tmpFile, file); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			tmpFile.Close()
-
-			// post process
-			if err := postprocessGcodeFile(SmFixPath, tmpFile.Name()); err != nil {
-				http.Error(w, "SMFix error: "+err.Error(), http.StatusInternalServerError)
-				return
-			}
-			content, _ = ioutil.ReadFile(tmpFile.Name())
-		} else {
-			content, _ = io.ReadAll(file)
-		}
 
 		// Send the stream to the printer
-		if err := Connector.Upload(printer, fd.Filename, content); err != nil {
+		payload := NewPayload(file, fd.Filename, fd.Size)
+		if err := Connector.Upload(printer, payload); err != nil {
 			log.Print("Error uploading file: ", err.Error())
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		log.Printf("Upload finished: %s [%s]", fd.Filename, humanReadableSize(int64(len(content))))
+		log.Printf("Upload finished: %s [%s]", fd.Filename, payload.ReadableSize())
 
 		// Return success response
 		w.WriteHeader(http.StatusOK)

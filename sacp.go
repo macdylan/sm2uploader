@@ -332,18 +332,7 @@ func SACP_start_upload(conn net.Conn, filename string, gcode []byte, timeout tim
 					log.Print("-- Upload finished")
 				}
 
-				conn.SetWriteDeadline(time.Now().Add(timeout))
-				_, err := conn.Write(SACP_pack{
-					ReceiverID: 2,
-					SenderID:   0,
-					Attribute:  0,
-					Sequence:   1,
-					CommandSet: 0x01,
-					CommandID:  0x06,
-					Data:       []byte{},
-				}.Encode())
-
-				if err != nil {
+				if err := SACP_disconnect(conn, timeout); err != nil {
 					return err
 				}
 
@@ -358,4 +347,19 @@ func SACP_start_upload(conn net.Conn, filename string, gcode []byte, timeout tim
 		}
 
 	}
+}
+
+func SACP_disconnect(conn net.Conn, timeout time.Duration) (err error) {
+	conn.SetWriteDeadline(time.Now().Add(timeout))
+	_, err = conn.Write(SACP_pack{
+		ReceiverID: 2,
+		SenderID:   0,
+		Attribute:  0,
+		Sequence:   1,
+		CommandSet: 0x01,
+		CommandID:  0x06,
+		Data:       []byte{},
+	}.Encode())
+
+	return err
 }

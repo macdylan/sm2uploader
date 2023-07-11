@@ -17,10 +17,10 @@ var (
 	KnownHosts          string
 	DiscoverTimeout     time.Duration
 	OctoPrintListenAddr string
-	SmFixPath           string
+	SmFix               bool
 	Debug               bool
 
-	_Payloads []string
+	_Payloads []*Payload
 )
 
 func main() {
@@ -44,7 +44,7 @@ func main() {
 	flag.StringVar(&KnownHosts, "knownhosts", defaultKnownHosts, "known hosts")
 	flag.DurationVar(&DiscoverTimeout, "timeout", time.Second*4, "printer discovery timeout")
 	flag.StringVar(&OctoPrintListenAddr, "octoprint", "", "octoprint listen address, e.g. '-octoprint :8844' then you can upload files to printer by http://localhost:8844")
-	flag.StringVar(&SmFixPath, "smfix", "", "specify the absolute path for SMFix(https://github.com/macdylan/SMFix). if not specified, it will search in the current directory.")
+	flag.BoolVar(&SmFix, "fix", true, "enable SMFix(built-in), -fix=0 to disable.")
 	flag.BoolVar(&Debug, "debug", false, "debug mode")
 
 	flag.Usage = flag_usage
@@ -54,10 +54,9 @@ func main() {
 		log.Println("-- Debug mode")
 	}
 
-	if SmFixPath == "" {
-		SmFixPath, _ = searchInDir("smfix*", dir)
+	if !SmFix {
+		log.Println("smfix disabled")
 	}
-	log.Println("SMFix:", SmFixPath)
 
 	var printer *Printer
 	ls := NewLocalStorage(KnownHosts)
@@ -157,10 +156,11 @@ func main() {
 
 	// 检查文件参数是否存在
 	for _, file := range flag.Args() {
-		if _, err := os.Stat(file); os.IsNotExist(err) {
+		if st, err := os.Stat(file); os.IsNotExist(err) {
 			log.Panicf("File %s does not exist\n", file)
 		} else {
-			_Payloads = append(_Payloads, file)
+			f, _ := os.Open(file)
+			_Payloads = append(_Payloads, NewPayload(f, st.Name(), st.Size()))
 		}
 	}
 
@@ -173,25 +173,13 @@ func main() {
 	envFilename := os.Getenv("SLIC3R_PP_OUTPUT_NAME")
 
 	// Upload files to host
-	for _, fpath := range _Payloads {
-		if SmFixPath != "" {
-			if err := postprocessGcodeFile(SmFixPath, fpath); err != nil {
-				log.Panicln("SMFix error:", err)
-			}
+	for _, p := range _Payloads {
+		if envFilename != "" {
+			p.SetName(filepath.Base(envFilename))
 		}
-		content, err := os.ReadFile(fpath)
-		if err != nil {
-			log.Panicln(err)
-		}
-		st, _ := os.Stat(fpath)
-		var fname string
-		if envFilename == "" {
-			fname = normalizedFilename(filepath.Base(fpath))
-		} else {
-			fname = normalizedFilename(filepath.Base(envFilename))
-		}
-		log.Printf("Uploading file '%s' [%s]...", fname, humanReadableSize(st.Size()))
-		if err := Connector.Upload(printer, fname, content); err != nil {
+
+		log.Printf("Uploading file '%s' [%s]...", p.Name, p.ReadableSize())
+		if err := Connector.Upload(printer, p); err != nil {
 			log.Panicln(err)
 		} else {
 			log.Println("Upload finished.")

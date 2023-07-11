@@ -3,11 +3,11 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"regexp"
-	"runtime"
+
+	"github.com/macdylan/SMFix/fix"
 )
 
 type empty struct{}
@@ -31,40 +31,36 @@ func normalizedFilename(filename string) string {
 	return reFilename.ReplaceAllString(filename, "")
 }
 
-func searchInDir(exp string, dirpath string) (abspath string, err error) {
-	dirInfo, err := os.Lstat(dirpath)
-	if err != nil {
-		return abspath, err
+func postProcessFile(file_path string) (out []byte, err error) {
+	var r *os.File
+	if r, err = os.Open(file_path); err != nil {
+		return
 	}
-
-	// check if the dir is a symbolic link
-	if dirInfo.Mode()&os.ModeSymlink != 0 {
-		dirpath, _ = os.Readlink(dirpath)
-	}
-
-	if found, err := filepath.Glob(filepath.Join(dirpath, exp)); err == nil {
-		for _, file := range found {
-			if stat, err := os.Stat(file); err == nil && !stat.IsDir() {
-				if runtime.GOOS == "windows" { // TODO: check if executable
-					return file, err
-				} else if stat.Mode().Perm()&0100 != 0 {
-					return file, err
-				}
-			}
-		}
-	}
-
-	return abspath, err
+	defer r.Close()
+	return postProcess(r)
 }
 
-func postprocessGcodeFile(cmd string, file string) error {
-	p := exec.Command(cmd, file)
-	if out, err := p.CombinedOutput(); err != nil {
-		// ignore
-		if bytes.Contains(out, []byte(`No need to fix again`)) {
-			return nil
-		}
-		return err
+func postProcess(r io.Reader) (out []byte, err error) {
+	header, errfix := fix.ExtractHeader(r)
+
+	out, err = io.ReadAll(r)
+	if err != nil {
+		return
 	}
-	return nil
+
+	/*
+		if err == fix.ErrIsFixed || err == fix.ErrInvalidGcode {
+			return out, nil
+		}
+
+		if err != nil {
+			return out, err
+		}
+	*/
+
+	if len(header) > 25 {
+		return append(bytes.Join(header, []byte("\n")), out...), nil
+	} else {
+		return out, errfix
+	}
 }
