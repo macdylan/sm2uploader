@@ -4,11 +4,18 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 )
 
 const (
 	maxMemory = 64 << 20 // 64MB
+)
+
+var (
+	noTrim    = false
+	noShutoff = false
+	noPreheat = false
 )
 
 func LoggingMiddleware(next http.Handler) http.Handler {
@@ -50,6 +57,27 @@ func startOctoPrintServer(listenAddr string, printer *Printer) error {
 			return
 		}
 		defer file.Close()
+
+		// read X-Api-Key header
+		apiKey := r.Header.Get("X-Api-Key")
+		if len(apiKey) > 5 {
+			noTrim = strings.Contains(apiKey, "notrim")
+			noPreheat = strings.Contains(apiKey, "nopreheat")
+			noShutoff = strings.Contains(apiKey, "noshutoff")
+			msg := make([]string, 0, 3)
+			if noTrim {
+				msg = append(msg, "-notrim")
+			}
+			if noPreheat {
+				msg = append(msg, "-nopreheat")
+			}
+			if noShutoff {
+				msg = append(msg, "-noshutoff")
+			}
+			if len(msg) > 0 {
+				log.Printf("SMFix with args: %s", strings.Join(msg, " "))
+			}
+		}
 
 		// Send the stream to the printer
 		payload := NewPayload(file, fd.Filename, fd.Size)

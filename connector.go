@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"runtime"
 	"time"
 )
 
@@ -32,6 +33,7 @@ func (p *Payload) ReadableSize() string {
 }
 
 func (p *Payload) GetContent(fix bool) (cont []byte, err error) {
+	defer runtime.GC()
 	if fix {
 		cont, err = postProcess(p.File)
 		p.Size = int64(len(cont))

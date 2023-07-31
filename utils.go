@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"io"
 	"os"
 	"regexp"
+	"strings"
 
 	"github.com/macdylan/SMFix/fix"
 )
@@ -43,20 +45,32 @@ func postProcessFile(file_path string) (out []byte, err error) {
 func postProcess(r io.Reader) (out []byte, err error) {
 	header, errfix := fix.ExtractHeader(r)
 
-	out, err = io.ReadAll(r)
-	if err != nil {
-		return
+	if h, ok := r.(io.ReadSeeker); ok {
+		h.Seek(0, 0)
 	}
 
-	/*
-		if err == fix.ErrIsFixed || err == fix.ErrInvalidGcode {
-			return out, nil
-		}
+	gcodes := make([]string, 0, fix.Params.TotalLines+len(header)+128)
+	sc := bufio.NewScanner(r)
+	for sc.Scan() {
+		gcodes = append(gcodes, sc.Text())
+	}
+	if err = sc.Err(); err != nil {
+		return nil, err
+	}
 
-		if err != nil {
-			return out, err
+	if errfix == nil {
+		if !noTrim {
+			gcodes = fix.GcodeTrimLines(gcodes)
 		}
-	*/
+		if !noShutoff {
+			gcodes = fix.GcodeFixShutoff(gcodes)
+		}
+		if !noPreheat {
+			gcodes = fix.GcodeFixPreheat(gcodes)
+		}
+	}
+
+	out = []byte(strings.Join(gcodes, "\n"))
 
 	if len(header) > 25 {
 		return append(bytes.Join(header, []byte("\n")), out...), nil
