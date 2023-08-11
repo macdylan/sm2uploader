@@ -68,6 +68,9 @@ func postProcess(r io.Reader) (out []byte, err error) {
 		if !noPreheat {
 			gcodes = fix.GcodeFixPreheat(gcodes)
 		}
+		if !noReinforceTower {
+			gcodes = fix.GcodeReinforceTower(gcodes)
+		}
 	}
 
 	out = []byte(strings.Join(gcodes, "\n"))

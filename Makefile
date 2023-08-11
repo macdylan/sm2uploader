@@ -8,6 +8,7 @@ endif
 FLAGS = -ldflags="-w -s $(VERSION)"
 CMD = go build -trimpath $(FLAGS)
 SRC = $(shell ls *.go | grep -v _test.go)
+EXT_FILES = README.md README.zh-cn.md LICENSE
 
 .PHONY: all clean dep darwin-arm64 darwin-amd64 linux-amd64 linux-arm7 linux-arm6 win64 win32
 
@@ -35,12 +36,16 @@ win32: $(SRC)
 dep: # Get the dependencies
 	go mod download
 
-all: dep darwin-arm64 darwin-amd64 linux-amd64 linux-arm7 linux-arm6 win64 win32
+all: dep darwin-arm64 win64 win32 darwin-amd64 linux-amd64 linux-arm7 linux-arm6
 	@true
 
 all-zip: all
-	for p in darwin-arm64 darwin-amd64 linux-amd64 linux-arm7 linux-arm6 win64.exe win32.exe; do \
-		zip -j $(DIST)$(NAME)-$$p.zip $(DIST)$(NAME)-$$p README.md README.zh-cn.md LICENSE; \
+	for p in darwin-arm64 win64.exe win32.exe darwin-amd64 linux-amd64 linux-arm7 linux-arm6; do \
+		if [ "$$p" = "win64.exe" -o "$$p" = "win32.exe" ]; then \
+			zip -j $(DIST)$(NAME)-$$p.zip $(DIST)$(NAME)-$$p $(EXT_FILES) *.bat; \
+		else \
+			zip -j $(DIST)$(NAME)-$$p.zip $(DIST)$(NAME)-$$p $(EXT_FILES); \
+		fi \
 	done
 
 clean:

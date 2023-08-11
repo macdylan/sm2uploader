@@ -13,9 +13,10 @@ const (
 )
 
 var (
-	noTrim    = false
-	noShutoff = false
-	noPreheat = false
+	noTrim           = false
+	noShutoff        = false
+	noPreheat        = false
+	noReinforceTower = false
 )
 
 func LoggingMiddleware(next http.Handler) http.Handler {
@@ -64,6 +65,7 @@ func startOctoPrintServer(listenAddr string, printer *Printer) error {
 			noTrim = strings.Contains(apiKey, "notrim")
 			noPreheat = strings.Contains(apiKey, "nopreheat")
 			noShutoff = strings.Contains(apiKey, "noshutoff")
+			noReinforceTower = strings.Contains(apiKey, "noreinforcetower")
 			msg := make([]string, 0, 3)
 			if noTrim {
 				msg = append(msg, "-notrim")
@@ -73,6 +75,9 @@ func startOctoPrintServer(listenAddr string, printer *Printer) error {
 			}
 			if noShutoff {
 				msg = append(msg, "-noshutoff")
+			}
+			if noReinforceTower {
+				msg = append(msg, "-noreinforcetower")
 			}
 			if len(msg) > 0 {
 				log.Printf("SMFix with args: %s", strings.Join(msg, " "))
