@@ -32,13 +32,13 @@ func (p *Payload) ReadableSize() string {
 	return humanReadableSize(p.Size)
 }
 
-func (p *Payload) GetContent(fix bool) (cont []byte, err error) {
+func (p *Payload) GetContent(nofix bool) (cont []byte, err error) {
 	defer runtime.GC()
-	if fix {
+	if nofix || !shouldBeFix(p.Name) {
+		cont, err = io.ReadAll(p.File)
+	} else {
 		cont, err = postProcess(p.File)
 		p.Size = int64(len(cont))
-	} else {
-		cont, err = io.ReadAll(p.File)
 	}
 	return cont, err
 }

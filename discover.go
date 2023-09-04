@@ -83,28 +83,22 @@ func Discover(timeout time.Duration) ([]*Printer, error) {
 }
 
 func getBroadcastAddresses() ([]string, error) {
-	ifs, err := net.InterfaceAddrs()
+	ifs, err := net.Interfaces()
 	if err != nil {
 		return nil, err
 	}
 
-	addrs := make([]string, 0)
-	for _, address := range ifs {
-		var ip net.IP
-		switch typedAddress := address.(type) {
-		case *net.TCPAddr:
-			ip = typedAddress.IP.To4()
-		case *net.UDPAddr:
-			ip = typedAddress.IP.To4()
-		case *net.IPNet:
-			ip = typedAddress.IP.To4()
-		default:
+	baddrs := make([]string, 0, len(ifs))
+	for _, iface := range ifs {
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
 		}
-
-		if ip != nil && len(ip) == net.IPv4len && ip.IsGlobalUnicast() {
-			ip[3] = 255
-			addrs = append(addrs, ip.String())
+		for _, addr := range addrs {
+			if n, ok := addr.(*net.IPNet); ok && !n.IP.IsLoopback() && n.IP.To4() != nil {
+				baddrs = append(baddrs, n.IP.Mask(n.IP.DefaultMask()).String())
+			}
 		}
 	}
-	return addrs, nil
+	return baddrs, nil
 }

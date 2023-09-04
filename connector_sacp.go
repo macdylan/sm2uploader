@@ -48,8 +48,8 @@ func (sc *SACPConnector) Disconnect() error {
 }
 
 func (sc *SACPConnector) Upload(payload *Payload) (err error) {
-	content, err := payload.GetContent(SmFix)
-	if SmFix {
+	content, err := payload.GetContent(NoFix)
+	if !NoFix {
 		if err != nil {
 			log.Printf("G-Code fix error(ignored): %s", err)
 		} else {

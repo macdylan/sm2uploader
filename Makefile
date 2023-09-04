@@ -19,13 +19,13 @@ darwin-amd64: $(SRC)
 	GOOS=darwin GOARCH=amd64 $(CMD) -o $(DIST)$(NAME)-$@ $^
 
 linux-amd64: $(SRC)
-	GOOS=linux GOARCH=amd64 $(CMD) -o $(DIST)$(NAME)-$@ $^
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(CMD) -o $(DIST)$(NAME)-$@ $^
 
 linux-arm7: $(SRC)
-	GOOS=linux GOARCH=arm GOARM=7 $(CMD) -o $(DIST)$(NAME)-$@ $^
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 $(CMD) -o $(DIST)$(NAME)-$@ $^
 
 linux-arm6: $(SRC)
-	GOOS=linux GOARCH=arm GOARM=6 $(CMD) -o $(DIST)$(NAME)-$@ $^
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=6 $(CMD) -o $(DIST)$(NAME)-$@ $^
 
 win64: $(SRC)
 	GOOS=windows GOARCH=amd64 $(CMD) -o $(DIST)$(NAME)-$@.exe $^

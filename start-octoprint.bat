@@ -16,8 +16,8 @@ set w64=sm2uploader-win64.exe
 set w32=sm2uploader-win32.exe
 set cmd=
 
-where /q %w64% && set "cmd=%w64%"
 where /q %w32% && set "cmd=%w32%"
+where /q %w64% && set "cmd=%w64%"
 
 if "%cmd%"=="" (
     echo Can not find %w64% or %w32%

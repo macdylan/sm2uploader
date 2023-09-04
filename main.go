@@ -17,10 +17,16 @@ var (
 	KnownHosts          string
 	DiscoverTimeout     time.Duration
 	OctoPrintListenAddr string
-	SmFix               bool
+	NoFix               bool
 	Debug               bool
 
-	_Payloads []*Payload
+	_Payloads       []*Payload
+	SmFixExtensions = map[string]bool{
+		".gcode": true,
+		".nc":    false,
+		".cnc":   false,
+		".bin":   false,
+	}
 )
 
 func main() {
@@ -44,7 +50,7 @@ func main() {
 	flag.StringVar(&KnownHosts, "knownhosts", defaultKnownHosts, "known hosts")
 	flag.DurationVar(&DiscoverTimeout, "timeout", time.Second*4, "printer discovery timeout")
 	flag.StringVar(&OctoPrintListenAddr, "octoprint", "", "octoprint listen address, e.g. '-octoprint :8844' then you can upload files to printer by http://localhost:8844")
-	flag.BoolVar(&SmFix, "fix", true, "enable SMFix(built-in), -fix=0 to disable.")
+	flag.BoolVar(&NoFix, "nofix", false, "disable SMFix(built-in)")
 	flag.BoolVar(&Debug, "debug", false, "debug mode")
 
 	flag.Usage = flag_usage
@@ -54,7 +60,7 @@ func main() {
 		log.Println("-- Debug mode")
 	}
 
-	if !SmFix {
+	if NoFix {
 		log.Println("smfix disabled")
 	}
 

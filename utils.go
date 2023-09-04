@@ -5,7 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -33,6 +33,7 @@ func normalizedFilename(filename string) string {
 	return reFilename.ReplaceAllString(filename, "")
 }
 
+/*
 func postProcessFile(file_path string) (out []byte, err error) {
 	var r *os.File
 	if r, err = os.Open(file_path); err != nil {
@@ -41,6 +42,7 @@ func postProcessFile(file_path string) (out []byte, err error) {
 	defer r.Close()
 	return postProcess(r)
 }
+*/
 
 func postProcess(r io.Reader) (out []byte, err error) {
 	header, errfix := fix.ExtractHeader(r)
@@ -59,17 +61,21 @@ func postProcess(r io.Reader) (out []byte, err error) {
 	}
 
 	if errfix == nil {
+		funcs := make([]func([]string) []string, 0, 4)
 		if !noTrim {
-			gcodes = fix.GcodeTrimLines(gcodes)
+			funcs = append(funcs, fix.GcodeTrimLines)
 		}
 		if !noShutoff {
-			gcodes = fix.GcodeFixShutoff(gcodes)
+			funcs = append(funcs, fix.GcodeFixShutoff)
 		}
 		if !noPreheat {
-			gcodes = fix.GcodeFixPreheat(gcodes)
+			funcs = append(funcs, fix.GcodeFixPreheat)
 		}
 		if !noReinforceTower {
-			gcodes = fix.GcodeReinforceTower(gcodes)
+			funcs = append(funcs, fix.GcodeReinforceTower)
+		}
+		for _, fn := range funcs {
+			gcodes = fn(gcodes)
 		}
 	}
 
@@ -80,4 +86,9 @@ func postProcess(r io.Reader) (out []byte, err error) {
 	} else {
 		return out, errfix
 	}
+}
+
+func shouldBeFix(fpath string) bool {
+	ext := strings.ToLower(filepath.Ext(fpath))
+	return SmFixExtensions[ext]
 }
