@@ -52,7 +52,7 @@ func (sc *SACPConnector) Upload(payload *Payload) (err error) {
 	if !NoFix {
 		if err != nil {
 			log.Printf("G-Code fix error(ignored): %s", err)
-		} else {
+		} else if payload.ShouldBeFix() {
 			log.Printf("G-Code fixed")
 		}
 	}

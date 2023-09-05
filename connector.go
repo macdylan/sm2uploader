@@ -34,13 +34,17 @@ func (p *Payload) ReadableSize() string {
 
 func (p *Payload) GetContent(nofix bool) (cont []byte, err error) {
 	defer runtime.GC()
-	if nofix || !shouldBeFix(p.Name) {
+	if nofix || !p.ShouldBeFix() {
 		cont, err = io.ReadAll(p.File)
 	} else {
 		cont, err = postProcess(p.File)
 		p.Size = int64(len(cont))
 	}
 	return cont, err
+}
+
+func (p *Payload) ShouldBeFix() bool {
+	return shouldBeFix(p.Name)
 }
 
 func NewPayload(file io.Reader, name string, size int64) *Payload {

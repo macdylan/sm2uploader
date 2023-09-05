@@ -145,7 +145,7 @@ func (hc *HTTPConnector) Upload(payload *Payload) (err error) {
 					log.SetOutput(os.Stderr)
 					if err != nil {
 						log.Printf("G-Code fix error(ignored): %s", err)
-					} else {
+					} else if payload.ShouldBeFix() {
 						log.Printf("G-Code fixed")
 					}
 					log.SetOutput(w)
