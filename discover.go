@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/binary"
 	"fmt"
 	"log"
 	"net"
@@ -95,8 +96,15 @@ func getBroadcastAddresses() ([]string, error) {
 			continue
 		}
 		for _, addr := range addrs {
-			if n, ok := addr.(*net.IPNet); ok && !n.IP.IsLoopback() && n.IP.To4() != nil {
-				baddrs = append(baddrs, n.IP.Mask(n.IP.DefaultMask()).String())
+			if n, ok := addr.(*net.IPNet); ok && !n.IP.IsLoopback() {
+				if v4addr := n.IP.To4(); v4addr != nil {
+					// convert all parts of the masked bits to its maximum value
+					// by converting the address into a 32 bit integer and then
+					// ORing it with the inverted mask
+					baddr := make(net.IP, len(v4addr))
+					binary.BigEndian.PutUint32(baddr, binary.BigEndian.Uint32(v4addr)|^binary.BigEndian.Uint32(n.IP.DefaultMask()))
+					baddrs = append(baddrs, baddr.String())
+				}
 			}
 		}
 	}
