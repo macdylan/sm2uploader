@@ -5,7 +5,7 @@ go 1.20
 require (
 	github.com/gosuri/uilive v0.0.4
 	github.com/imroc/req/v3 v3.11.0
-	github.com/macdylan/SMFix/fix v0.0.0-20230904075958-62dd346d9d73
+	github.com/macdylan/SMFix/fix v0.0.0-20231103175919-a11212783601
 	github.com/manifoldco/promptui v0.9.0
 	gopkg.in/yaml.v3 v3.0.1
 )
