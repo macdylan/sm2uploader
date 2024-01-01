@@ -57,7 +57,7 @@ func main() {
 	flag.Parse()
 
 	if Debug {
-		log.Println("-- Debug mode")
+		log.Printf("-- Debug mode: %s", Version)
 	}
 
 	if NoFix {
