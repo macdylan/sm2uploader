@@ -9,7 +9,6 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"io"
 	"log"
 	"net"
@@ -164,7 +163,6 @@ func SACP_connect(ip string, timeout time.Duration) (net.Conn, error) {
 		CommandSet: 0x01,
 		CommandID:  0x05,
 		Data: []byte{
-			// 7, 0, 'D', 'e', 's', 'k', 't', 'o', 'p',
 			11, 0, 's', 'm', '2', 'u', 'p', 'l', 'o', 'a', 'd', 'e', 'r',
 			0, 0,
 			0, 0,
@@ -177,21 +175,21 @@ func SACP_connect(ip string, timeout time.Duration) (net.Conn, error) {
 		return nil, err
 	}
 
-	p, err := SACP_read(conn, timeout)
-	if err != nil || p == nil {
-		// log.Println("Error reading \"hello\" responce: ", err)
-		conn.Close()
-		return nil, err
-	}
+	for {
+		p, err := SACP_read(conn, timeout)
+		if err != nil || p == nil {
+			// log.Println("Error reading \"hello\" responce: ", err)
+			conn.Close()
+			return nil, err
+		}
 
-	if Debug {
-		log.Printf("-- SACP_connect got:\n%v", p)
-	}
+		if Debug {
+			log.Printf("-- SACP_connect got:\n%v", p)
+		}
 
-	if !(p.CommandSet == 1 && p.CommandID == 5) {
-		// log.Printf("Got command set/id %d/%d but expected 1/5", p.CommandSet, p.CommandID)
-		conn.Close()
-		return nil, fmt.Errorf("got command set/id %d/%d but expected 1/5", p.CommandSet, p.CommandID)
+		if p.CommandSet == 1 && p.CommandID == 5 {
+			break
+		}
 	}
 
 	if Debug {
@@ -341,9 +339,8 @@ func SACP_start_upload(conn net.Conn, filename string, gcode []byte, timeout tim
 
 			log.Print("Unable to process b0/02 with invalid data", p.Data)
 
-			// if no... I don't know what to do :)
 		default:
-			return fmt.Errorf("unknown command %d/%d", p.CommandSet, p.CommandID)
+			continue
 		}
 
 	}
