@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"sync"
 	"time"
 )
 
@@ -13,26 +14,28 @@ import (
  * an empty slice. If an error occurs, it returns nil.
  */
 func Discover(timeout time.Duration) ([]*Printer, error) {
-	// Create a slice to hold the printers
-	printers := []*Printer{}
+	var (
+		mu = sync.Mutex{}
+		// Create a slice to hold the printers
+		printers = []*Printer{}
+	)
 
 	addrs, err := getBroadcastAddresses()
 	if err != nil {
 		return printers, err
 	}
 
-	for _, addr := range addrs {
-
+	discoverPrinter := func(addr string) error {
 		// Create a new UDP broadcast address
 		broadcastAddr, err := net.ResolveUDPAddr("udp4", fmt.Sprintf("%s:%d", addr, 20054))
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		// Create a new UDP connection
 		conn, err := net.ListenUDP("udp4", nil)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		defer conn.Close()
 
@@ -46,7 +49,7 @@ func Discover(timeout time.Duration) ([]*Printer, error) {
 		// Send the discover message
 		_, err = conn.WriteTo([]byte("discover"), broadcastAddr)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		// Create a buffer to hold the response
@@ -61,7 +64,7 @@ func Discover(timeout time.Duration) ([]*Printer, error) {
 				if err, ok := err.(net.Error); ok && err.Timeout() {
 					break
 				}
-				return nil, err
+				return err
 			}
 
 			if Debug {
@@ -75,9 +78,25 @@ func Discover(timeout time.Duration) ([]*Printer, error) {
 			}
 
 			// Add the printer to the slice
+			mu.Lock()
 			printers = append(printers, printer)
+			mu.Unlock()
 		}
+		return nil
 	}
+
+	var wg sync.WaitGroup
+	for _, addr := range addrs {
+		wg.Add(1)
+		go func(addr string) {
+			defer wg.Done()
+			err := discoverPrinter(addr)
+			if err != nil {
+				log.Printf("Error discovering on %s: %v", addr, err)
+			}
+		}(addr)
+	}
+	wg.Wait()
 
 	// Return the slice of printers
 	return printers, nil
@@ -89,7 +108,7 @@ func getBroadcastAddresses() ([]string, error) {
 		return nil, err
 	}
 
-	baddrs := make([]string, 0, len(ifs))
+	addrMap := map[string]bool{}
 	for _, iface := range ifs {
 		addrs, err := iface.Addrs()
 		if err != nil {
@@ -103,10 +122,17 @@ func getBroadcastAddresses() ([]string, error) {
 					// ORing it with the inverted mask
 					baddr := make(net.IP, len(v4addr))
 					binary.BigEndian.PutUint32(baddr, binary.BigEndian.Uint32(v4addr)|^binary.BigEndian.Uint32(n.IP.DefaultMask()))
-					baddrs = append(baddrs, baddr.String())
+					if s := baddr.String(); !addrMap[s] {
+						addrMap[s] = true
+					}
 				}
 			}
 		}
 	}
-	return baddrs, nil
+
+	addrs := make([]string, 0, len(addrMap))
+	for addr := range addrMap {
+		addrs = append(addrs, addr)
+	}
+	return addrs, nil
 }

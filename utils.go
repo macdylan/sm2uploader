@@ -45,25 +45,43 @@ func postProcessFile(file_path string) (out []byte, err error) {
 */
 
 func postProcess(r io.Reader) (out []byte, err error) {
-	header, errfix := fix.ExtractHeader(r)
-
-	if h, ok := r.(io.ReadSeeker); ok {
-		h.Seek(0, 0)
-	}
-
-	gcodes := make([]string, 0, fix.Params.TotalLines+len(header)+128)
-	sc := bufio.NewScanner(r)
+	var (
+		isFixed = false
+		nl      = []byte("\n")
+		headers = [][]byte{}
+		gcodes  = []*fix.GcodeBlock{}
+		sc      = bufio.NewScanner(r)
+	)
 	for sc.Scan() {
-		gcodes = append(gcodes, sc.Text())
-	}
-	if err = sc.Err(); err != nil {
-		return nil, err
+		line := sc.Text()
+		if !isFixed && strings.HasPrefix(line, "; Postprocessed by smfix") {
+			isFixed = true
+		}
+
+		g, err := fix.ParseGcodeBlock(line)
+		if err == nil {
+			if g.Is("G4") {
+				var s int
+				if err := g.GetParam('S', &s); err == nil && s == 0 {
+					continue
+				}
+			}
+			gcodes = append(gcodes, g)
+			continue
+		}
+		if err != fix.ErrEmptyString {
+			return nil, err
+		}
 	}
 
-	if errfix == nil {
-		funcs := make([]func([]string) []string, 0, 4)
+	if !isFixed {
+		funcs := []fix.GcodeModifier{}
+
 		if !noTrim {
-			funcs = append(funcs, fix.GcodeTrimLines)
+			// funcs = append(funcs, fix.GcodeTrimLines)
+		}
+		if !noReplaceTool {
+			funcs = append(funcs, fix.GcodeReplaceToolNum)
 		}
 		if !noShutoff {
 			funcs = append(funcs, fix.GcodeFixShutoff)
@@ -77,15 +95,24 @@ func postProcess(r io.Reader) (out []byte, err error) {
 		for _, fn := range funcs {
 			gcodes = fn(gcodes)
 		}
+
+		if headers, err = fix.ExtractHeader(gcodes); err != nil {
+			return nil, err
+		}
 	}
 
-	out = []byte(strings.Join(gcodes, "\n"))
+	var buf bytes.Buffer
 
-	if len(header) > 25 {
-		return append(bytes.Join(header, []byte("\n")), out...), nil
-	} else {
-		return out, errfix
+	for _, h := range headers {
+		buf.Write(h)
+		buf.Write(nl)
 	}
+
+	for _, gcode := range gcodes {
+		buf.WriteString(gcode.String())
+		buf.Write(nl)
+	}
+	return buf.Bytes(), nil
 }
 
 func shouldBeFix(fpath string) bool {

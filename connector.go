@@ -4,7 +4,6 @@ import (
 	"errors"
 	"io"
 	"net"
-	"runtime"
 	"time"
 )
 
@@ -33,7 +32,6 @@ func (p *Payload) ReadableSize() string {
 }
 
 func (p *Payload) GetContent(nofix bool) (cont []byte, err error) {
-	defer runtime.GC()
 	if nofix || !p.ShouldBeFix() {
 		cont, err = io.ReadAll(p.File)
 	} else {
