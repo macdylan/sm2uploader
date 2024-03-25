@@ -92,6 +92,9 @@ func postProcess(r io.Reader) (out []byte, err error) {
 		if !noReinforceTower {
 			funcs = append(funcs, fix.GcodeReinforceTower)
 		}
+
+		funcs = append(funcs, fix.GcodeFixOrcaToolUnload)
+
 		for _, fn := range funcs {
 			gcodes = fn(gcodes)
 		}
