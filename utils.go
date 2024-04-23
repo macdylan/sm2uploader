@@ -80,14 +80,14 @@ func postProcess(r io.Reader) (out []byte, err error) {
 		if !noTrim {
 			// funcs = append(funcs, fix.GcodeTrimLines)
 		}
-		if !noReplaceTool {
-			funcs = append(funcs, fix.GcodeReplaceToolNum)
-		}
 		if !noShutoff {
 			funcs = append(funcs, fix.GcodeFixShutoff)
 		}
 		if !noPreheat {
 			funcs = append(funcs, fix.GcodeFixPreheat)
+		}
+		if !noReplaceTool {
+			funcs = append(funcs, fix.GcodeReplaceToolNum)
 		}
 		if !noReinforceTower {
 			funcs = append(funcs, fix.GcodeReinforceTower)
