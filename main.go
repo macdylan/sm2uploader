@@ -36,8 +36,6 @@ func main() {
 		}
 	}()
 
-	Debug = os.Getenv("DEBUG") != ""
-
 	// 获取程序所在目录
 	ex, _ := os.Executable()
 	dir, err := filepath.Abs(filepath.Dir(ex))
@@ -45,13 +43,16 @@ func main() {
 		log.Panicln(err)
 	}
 	defaultKnownHosts := filepath.Join(dir, "hosts.yaml")
+	if envKnownhosts := os.Getenv("KNOWN_HOSTS"); envKnownhosts != "" {
+		defaultKnownHosts = envKnownhosts
+	}
 
-	flag.StringVar(&Host, "host", "", "upload to host(id/ip/hostname), not required.")
+	flag.StringVar(&Host, "host", os.Getenv("HOST"), "upload to host(id/ip/hostname), not required.")
 	flag.StringVar(&KnownHosts, "knownhosts", defaultKnownHosts, "known hosts")
-	flag.DurationVar(&DiscoverTimeout, "timeout", time.Second*4, "printer discovery timeout")
-	flag.StringVar(&OctoPrintListenAddr, "octoprint", "", "octoprint listen address, e.g. '-octoprint :8844' then you can upload files to printer by http://localhost:8844")
-	flag.BoolVar(&NoFix, "nofix", false, "disable SMFix(built-in)")
-	flag.BoolVar(&Debug, "debug", false, "debug mode")
+	flag.StringVar(&OctoPrintListenAddr, "octoprint", os.Getenv("OCTOPRINT"), "octoprint listen address, e.g. '-octoprint :8844' then you can upload files to printer by http://localhost:8844")
+	flag.DurationVar(&DiscoverTimeout, "timeout", parseDurationEnv("TIMEOUT", 4*time.Second), "printer discovery timeout")
+	flag.BoolVar(&NoFix, "nofix", parseBoolEnv("NOFIX", false), "disable SMFix(built-in)")
+	flag.BoolVar(&Debug, "debug", parseBoolEnv("DEBUG", false), "debug mode")
 
 	flag.Usage = flag_usage
 	flag.Parse()

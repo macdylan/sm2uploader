@@ -2,3 +2,4 @@
 dist/
 .vscode/
 go.work*
+docker-compose.yml

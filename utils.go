@@ -5,9 +5,12 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/macdylan/SMFix/fix"
 )
@@ -121,4 +124,22 @@ func postProcess(r io.Reader) (out []byte, err error) {
 func shouldBeFix(fpath string) bool {
 	ext := strings.ToLower(filepath.Ext(fpath))
 	return SmFixExtensions[ext]
+}
+
+func parseBoolEnv(key string, defaultValue bool) bool {
+	if value, ok := os.LookupEnv(key); ok {
+		if v, err := strconv.ParseBool(value); err == nil {
+			return v
+		}
+	}
+	return defaultValue
+}
+
+func parseDurationEnv(key string, defaultValue time.Duration) time.Duration {
+	if value, ok := os.LookupEnv(key); ok {
+		if v, err := time.ParseDuration(value); err == nil {
+			return v
+		}
+	}
+	return defaultValue
 }
