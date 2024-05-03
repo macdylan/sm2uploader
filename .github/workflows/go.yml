@@ -1,5 +1,3 @@
-# This workflow will build a golang project
-
 # For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-go
 name: Build
 
@@ -13,22 +11,38 @@ jobs:
     name: Go Build
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout
-      uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v3
 
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: '1.20'
-        check-latest: true
-    
-    - name: Build
-      run: make all-zip
-    
-    - name: Create Release
-      uses: softprops/action-gh-release@v1
-      with:
-        draft: true
-        prerelease: false
-        files: |
-          dist/*.zip
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.20"
+          check-latest: true
+
+      - name: Build
+        run: make all-zip
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          draft: true
+          prerelease: false
+          files: |
+            dist/*.zip
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            macdylan/sm2uploader:latest
+            macdylan/sm2uploader:${{ github.ref_name }}
