@@ -12,6 +12,9 @@ if %port% LSS 1024 (
     exit /b 1
 )
 
+set wdir=%~dp0
+cd /d %wdir%
+
 set w64=sm2uploader-win64.exe
 set w32=sm2uploader-win32.exe
 set cmd=

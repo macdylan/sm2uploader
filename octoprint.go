@@ -16,11 +16,11 @@ const (
 )
 
 var (
-	noTrim           = false
-	noShutoff        = false
-	noPreheat        = false
-	noReinforceTower = false
-	noReplaceTool    = false
+	noTrim    = false
+	noShutoff = false
+	// noPreheat        = false
+	// noReinforceTower = false
+	noReplaceTool = false
 )
 
 type stats struct {
@@ -203,23 +203,23 @@ func bedRequestResponse(w http.ResponseWriter, err string) {
 
 func argumentsFromApi(str string) {
 	noTrim = strings.Contains(str, "notrim")
-	noPreheat = strings.Contains(str, "nopreheat")
+	// noPreheat = strings.Contains(str, "nopreheat")
 	noShutoff = strings.Contains(str, "noshutoff")
-	noReinforceTower = strings.Contains(str, "noreinforcetower")
+	// noReinforceTower = strings.Contains(str, "noreinforcetower")
 	noReplaceTool = strings.Contains(str, "noreplacetool")
 	msg := []string{}
 	if noTrim {
 		msg = append(msg, "-notrim")
 	}
-	if noPreheat {
-		msg = append(msg, "-nopreheat")
-	}
+	// if noPreheat {
+	// 	msg = append(msg, "-nopreheat")
+	// }
 	if noShutoff {
 		msg = append(msg, "-noshutoff")
 	}
-	if noReinforceTower {
-		msg = append(msg, "-noreinforcetower")
-	}
+	// if noReinforceTower {
+	// 	msg = append(msg, "-noreinforcetower")
+	// }
 	if noReplaceTool {
 		msg = append(msg, "-noreplacetool")
 	}

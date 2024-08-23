@@ -86,15 +86,15 @@ func postProcess(r io.Reader) (out []byte, err error) {
 		if !noShutoff {
 			funcs = append(funcs, fix.GcodeFixShutoff)
 		}
-		if !noPreheat {
-			funcs = append(funcs, fix.GcodeFixPreheat)
-		}
+		// if !noPreheat {
+		// 	funcs = append(funcs, fix.GcodeFixPreheat)
+		// }
 		if !noReplaceTool {
 			funcs = append(funcs, fix.GcodeReplaceToolNum)
 		}
-		if !noReinforceTower {
-			funcs = append(funcs, fix.GcodeReinforceTower)
-		}
+		// if !noReinforceTower {
+		// 	funcs = append(funcs, fix.GcodeReinforceTower)
+		// }
 
 		funcs = append(funcs, fix.GcodeFixOrcaToolUnload)
 
