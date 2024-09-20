@@ -104,6 +104,18 @@ func (hc *HTTPConnector) Disconnect() (err error) {
 	return
 }
 
+func (hc *HTTPConnector) SendGCode(command string) (err error) {
+	// *** UNTESTED ***
+	r, err := hc.request().SetFormData(map[string]string{"command": command}).Post(hc.URL("/command"))
+	if err != nil {
+		return
+	}
+	if r.StatusCode != 200 {
+		err = fmt.Errorf("command error %d", r.StatusCode)
+	}
+	return
+}
+
 func (hc *HTTPConnector) Upload(payload *Payload) (err error) {
 	finished := make(chan empty, 1)
 	defer func() {

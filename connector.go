@@ -62,6 +62,7 @@ type Handler interface {
 	Connect() error
 	Disconnect() error
 	Upload(*Payload) error
+	SendGCode(string) error
 }
 
 func (c *connector) RegisterHandler(h Handler) {
@@ -88,6 +89,31 @@ func (c *connector) Upload(printer *Printer, payload *Payload) error {
 			}
 			// Upload the file to the printer
 			if err := h.Upload(payload); err != nil {
+				return err
+			}
+
+			// Return nil if successful
+			return nil
+		}
+	}
+	// Return error if printer is not available
+	return errors.New("Printer " + printer.IP + " is not available.")
+}
+
+// SendGCode to send a GCode command to a printer
+func (c *connector) SendGCode(printer *Printer, command string) error {
+	// Iterate through all handlers
+	for _, h := range c.handlers {
+		// Check if handler can ping the printer
+		if h.Ping(printer) {
+			// Connect to the printer
+			if err := h.Connect(); err != nil {
+				return err
+			}
+			defer h.Disconnect()
+
+			// Send the GCode command to the printer
+			if err := h.SendGCode(command); err != nil {
 				return err
 			}
 

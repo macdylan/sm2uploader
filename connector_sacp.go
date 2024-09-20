@@ -69,6 +69,15 @@ func (sc *SACPConnector) Upload(payload *Payload) (err error) {
 	return
 }
 
+func (sc *SACPConnector) SendGCode(command string) (err error) {
+	err = SACP_set_temperature(sc.conn, TOOL_EXTRUDER, 0x00, 34, SACPTimeout*time.Second)
+	err = SACP_set_temperature(sc.conn, TOOL_EXTRUDER, 0x01, 35, SACPTimeout*time.Second)
+	err = SACP_set_temperature(sc.conn, TOOL_BED, 0x00, 27, SACPTimeout*time.Second)
+	err = SACP_set_temperature(sc.conn, TOOL_BED, 0x01, 27, SACPTimeout*time.Second)
+	// err = SACP_set_temperature(sc.conn, command, SACPTimeout*time.Second)
+	return
+}
+
 func init() {
 	Connector.RegisterHandler(&SACPConnector{})
 }

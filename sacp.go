@@ -228,6 +228,74 @@ func SACP_read(conn net.Conn, timeout time.Duration) (*SACP_pack, error) {
 	return &sacp, err
 }
 
+var sequence uint16 = 2
+
+// Tools to SACP_set_temperature. The Tool ID is the extruder for the TOOL_EXTRUDER
+// for the heated bed, 0 is the inner zone, 1 is the outer zone
+const TOOL_EXTRUDER = 0x08
+const TOOL_BED = 0x05
+
+func SACP_set_temperature(conn net.Conn, tool uint8, tool_id uint8, temperature uint16, timeout time.Duration) error {
+	data := bytes.Buffer{}
+
+	// Tool, 0x08 is hotend, 0x05 is bed
+	data.WriteByte(tool)
+	// Tool ID, starting at 0x00
+	data.WriteByte(tool_id)
+
+	// Temperature
+	writeLE(&data, uint16(temperature))
+
+	var command_set byte
+	if tool == TOOL_EXTRUDER {
+		command_set = 0x10
+	} else if tool == TOOL_BED {
+		command_set = 0x14
+	} else {
+		return errors.New("unknown tool")
+	}
+	command_id := byte(0x02)
+
+	sequence++
+
+	conn.SetWriteDeadline(time.Now().Add(timeout))
+	_, err := conn.Write(SACP_pack{
+		ReceiverID: 1,
+		SenderID:   0,
+		Attribute:  0,
+		Sequence:   sequence,
+		CommandSet: command_set,
+		CommandID:  command_id,
+		Data:       data.Bytes(),
+	}.Encode())
+
+	if err != nil {
+		return err
+	}
+
+	if Debug {
+		log.Printf("-- Sequence: %d Sent GCode: %x", sequence, data.Bytes())
+	}
+
+	for {
+		conn.SetReadDeadline(time.Now().Add(timeout))
+		p, err := SACP_read(conn, timeout)
+		if err != nil {
+			return err
+		}
+
+		if Debug {
+			log.Printf("-- Got reply from printer: %v", p)
+		}
+
+		if p.Sequence == sequence && p.CommandSet == command_set && p.CommandID == command_id {
+			if len(p.Data) == 1 && p.Data[0] == 0 {
+				return nil
+			}
+		}
+	}
+}
+
 func SACP_start_upload(conn net.Conn, filename string, gcode []byte, timeout time.Duration) error {
 	// prepare data for upload begin packet
 	package_count := uint16((len(gcode) / SACP_data_len) + 1)

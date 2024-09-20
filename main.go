@@ -17,6 +17,7 @@ var (
 	KnownHosts          string
 	DiscoverTimeout     time.Duration
 	OctoPrintListenAddr string
+	GCodeCommand        string
 	NoFix               bool
 	Debug               bool
 
@@ -36,7 +37,7 @@ func main() {
 		}
 	}()
 
-	// 获取程序所在目录
+	// 获取程序所在目录 - Get the directory where the program is located
 	ex, _ := os.Executable()
 	dir, err := filepath.Abs(filepath.Dir(ex))
 	if err != nil {
@@ -50,6 +51,7 @@ func main() {
 	flag.StringVar(&Host, "host", os.Getenv("HOST"), "upload to host(id/ip/hostname), not required.")
 	flag.StringVar(&KnownHosts, "knownhosts", defaultKnownHosts, "known hosts")
 	flag.StringVar(&OctoPrintListenAddr, "octoprint", os.Getenv("OCTOPRINT"), "octoprint listen address, e.g. '-octoprint :8844' then you can upload files to printer by http://localhost:8844")
+	flag.StringVar(&GCodeCommand, "gcode", os.Getenv("GCODE"), "gcode command, e.g. 'M104 S210.0' to set extruder temperature")
 	flag.DurationVar(&DiscoverTimeout, "timeout", parseDurationEnv("TIMEOUT", 4*time.Second), "printer discovery timeout")
 	flag.BoolVar(&NoFix, "nofix", parseBoolEnv("NOFIX", false), "disable SMFix(built-in)")
 	flag.BoolVar(&Debug, "debug", parseBoolEnv("DEBUG", false), "debug mode")
@@ -161,7 +163,15 @@ func main() {
 		return
 	}
 
-	// 检查文件参数是否存在
+	if GCodeCommand != "" {
+		// send gcode command
+		if err := Connector.SendGCode(printer, GCodeCommand); err != nil {
+			log.Panic(err)
+		}
+		return
+	}
+
+	// 检查文件参数是否存在 - Check if the file parameter exists
 	for _, file := range flag.Args() {
 		if st, err := os.Stat(file); os.IsNotExist(err) {
 			log.Panicf("File %s does not exist\n", file)
@@ -171,7 +181,7 @@ func main() {
 		}
 	}
 
-	// 检查是否有传入的文件
+	// 检查是否有传入的文件 - Check if a file has been passed in
 	if len(_Payloads) == 0 {
 		log.Panicln("No input files")
 	}
