@@ -70,10 +70,11 @@ func (sc *SACPConnector) Upload(payload *Payload) (err error) {
 }
 
 func (sc *SACPConnector) SendGCode(command string) (err error) {
-	err = SACP_set_temperature(sc.conn, TOOL_EXTRUDER, 0x00, 34, SACPTimeout*time.Second)
-	err = SACP_set_temperature(sc.conn, TOOL_EXTRUDER, 0x01, 35, SACPTimeout*time.Second)
-	err = SACP_set_temperature(sc.conn, TOOL_BED, 0x00, 27, SACPTimeout*time.Second)
-	err = SACP_set_temperature(sc.conn, TOOL_BED, 0x01, 27, SACPTimeout*time.Second)
+	// err = SACP_set_tool_temperature(sc.conn, 0x00, 31, SACPTimeout*time.Second)
+	// err = SACP_set_tool_temperature(sc.conn, 0x01, 32, SACPTimeout*time.Second)
+	// err = SACP_set_bed_temperature(sc.conn, 0x00, 21, SACPTimeout*time.Second)
+	// err = SACP_set_bed_temperature(sc.conn, 0x01, 21, SACPTimeout*time.Second)
+	err = SACP_home(sc.conn, SACPTimeout*time.Second)
 	// err = SACP_set_temperature(sc.conn, command, SACPTimeout*time.Second)
 	return
 }

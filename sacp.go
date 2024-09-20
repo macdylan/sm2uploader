@@ -230,31 +230,44 @@ func SACP_read(conn net.Conn, timeout time.Duration) (*SACP_pack, error) {
 
 var sequence uint16 = 2
 
-// Tools to SACP_set_temperature. The Tool ID is the extruder for the TOOL_EXTRUDER
-// for the heated bed, 0 is the inner zone, 1 is the outer zone
-const TOOL_EXTRUDER = 0x08
-const TOOL_BED = 0x05
-
-func SACP_set_temperature(conn net.Conn, tool uint8, tool_id uint8, temperature uint16, timeout time.Duration) error {
+func SACP_set_tool_temperature(conn net.Conn, tool_id uint8, temperature uint16, timeout time.Duration) error {
 	data := bytes.Buffer{}
 
-	// Tool, 0x08 is hotend, 0x05 is bed
-	data.WriteByte(tool)
+	data.WriteByte(0x08)
+
 	// Tool ID, starting at 0x00
 	data.WriteByte(tool_id)
 
 	// Temperature
 	writeLE(&data, uint16(temperature))
 
-	var command_set byte
-	if tool == TOOL_EXTRUDER {
-		command_set = 0x10
-	} else if tool == TOOL_BED {
-		command_set = 0x14
-	} else {
-		return errors.New("unknown tool")
-	}
-	command_id := byte(0x02)
+	return SACP_send_command(conn, 0x10, 0x02, data, timeout)
+}
+
+func SACP_set_bed_temperature(conn net.Conn, tool_id uint8, temperature uint16, timeout time.Duration) error {
+	data := bytes.Buffer{}
+
+	data.WriteByte(0x05)
+
+	// Tool ID, starting at 0x00
+	data.WriteByte(tool_id)
+
+	// Temperature
+	writeLE(&data, uint16(temperature))
+
+	return SACP_send_command(conn, 0x14, 0x02, data, timeout)
+}
+
+func SACP_home(conn net.Conn, timeout time.Duration) error {
+	data := bytes.Buffer{}
+	data.WriteByte(0x00)
+
+	// 0x31 is also used when homing in Luban???
+	// 0x35 homes everything
+	return SACP_send_command(conn, 0x01, 0x35, data, timeout)
+}
+
+func SACP_send_command(conn net.Conn, command_set uint8, command_id uint8, data bytes.Buffer, timeout time.Duration) error {
 
 	sequence++
 
