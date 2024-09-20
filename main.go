@@ -17,7 +17,10 @@ var (
 	KnownHosts          string
 	DiscoverTimeout     time.Duration
 	OctoPrintListenAddr string
-	GCodeCommand        string
+	Tool1Temperature    int
+	Tool2Temperature    int
+	BedTemperature      int
+	Home                bool
 	NoFix               bool
 	Debug               bool
 
@@ -51,7 +54,10 @@ func main() {
 	flag.StringVar(&Host, "host", os.Getenv("HOST"), "upload to host(id/ip/hostname), not required.")
 	flag.StringVar(&KnownHosts, "knownhosts", defaultKnownHosts, "known hosts")
 	flag.StringVar(&OctoPrintListenAddr, "octoprint", os.Getenv("OCTOPRINT"), "octoprint listen address, e.g. '-octoprint :8844' then you can upload files to printer by http://localhost:8844")
-	flag.StringVar(&GCodeCommand, "gcode", os.Getenv("GCODE"), "gcode command, e.g. 'M104 S210.0' to set extruder temperature")
+	flag.IntVar(&Tool1Temperature, "tool1", parseIntEnv("TOOL1", 0), "set the temperature (preheat) of tool 1")
+	flag.IntVar(&Tool2Temperature, "tool2", parseIntEnv("TOOL2", 0), "set the temperature (preheat) of tool 2")
+	flag.IntVar(&BedTemperature, "bed", parseIntEnv("BED", 0), "set the temperature (preheat) of bed")
+	flag.BoolVar(&Home, "home", parseBoolEnv("HOME", false), "home the printer")
 	flag.DurationVar(&DiscoverTimeout, "timeout", parseDurationEnv("TIMEOUT", 4*time.Second), "printer discovery timeout")
 	flag.BoolVar(&NoFix, "nofix", parseBoolEnv("NOFIX", false), "disable SMFix(built-in)")
 	flag.BoolVar(&Debug, "debug", parseBoolEnv("DEBUG", false), "debug mode")
@@ -163,12 +169,12 @@ func main() {
 		return
 	}
 
-	if GCodeCommand != "" {
-		// send gcode command
-		if err := Connector.SendGCode(printer, GCodeCommand); err != nil {
+	preheating := Tool1Temperature != 0 || Tool2Temperature != 0 || BedTemperature != 0 || Home
+	if preheating {
+		log.Println("Preheating...")
+		if err := Connector.PreHeatCommands(printer, Tool1Temperature, Tool2Temperature, BedTemperature, Home); err != nil {
 			log.Panic(err)
 		}
-		return
 	}
 
 	// 检查文件参数是否存在 - Check if the file parameter exists
@@ -183,7 +189,9 @@ func main() {
 
 	// 检查是否有传入的文件 - Check if a file has been passed in
 	if len(_Payloads) == 0 {
-		log.Panicln("No input files")
+		if !preheating {
+			log.Panicln("No input files")
+		}
 	}
 
 	// 从 slic3r 环境变量中获取文件名

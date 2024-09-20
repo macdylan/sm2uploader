@@ -69,13 +69,18 @@ func (sc *SACPConnector) Upload(payload *Payload) (err error) {
 	return
 }
 
-func (sc *SACPConnector) SendGCode(command string) (err error) {
-	// err = SACP_set_tool_temperature(sc.conn, 0x00, 31, SACPTimeout*time.Second)
-	// err = SACP_set_tool_temperature(sc.conn, 0x01, 32, SACPTimeout*time.Second)
-	// err = SACP_set_bed_temperature(sc.conn, 0x00, 21, SACPTimeout*time.Second)
-	// err = SACP_set_bed_temperature(sc.conn, 0x01, 21, SACPTimeout*time.Second)
+func (sc *SACPConnector) SetToolTemperature(tool_id int, temperature int) (err error) {
+	err = SACP_set_tool_temperature(sc.conn, uint8(tool_id), uint16(temperature), SACPTimeout*time.Second)
+	return
+}
+
+func (sc *SACPConnector) SetBedTemperature(tool_id int, temperature int) (err error) {
+	err = SACP_set_bed_temperature(sc.conn, uint8(tool_id), uint16(temperature), SACPTimeout*time.Second)
+	return
+}
+
+func (sc *SACPConnector) Home() (err error) {
 	err = SACP_home(sc.conn, SACPTimeout*time.Second)
-	// err = SACP_set_temperature(sc.conn, command, SACPTimeout*time.Second)
 	return
 }
 

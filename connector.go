@@ -62,7 +62,9 @@ type Handler interface {
 	Connect() error
 	Disconnect() error
 	Upload(*Payload) error
-	SendGCode(string) error
+	SetToolTemperature(int, int) error
+	SetBedTemperature(int, int) error
+	Home() error
 }
 
 func (c *connector) RegisterHandler(h Handler) {
@@ -100,8 +102,7 @@ func (c *connector) Upload(printer *Printer, payload *Payload) error {
 	return errors.New("Printer " + printer.IP + " is not available.")
 }
 
-// SendGCode to send a GCode command to a printer
-func (c *connector) SendGCode(printer *Printer, command string) error {
+func (c *connector) PreHeatCommands(printer *Printer, tool_1_temperature int, tool_2_temperature int, bed_temperature int, home bool) error {
 	// Iterate through all handlers
 	for _, h := range c.handlers {
 		// Check if handler can ping the printer
@@ -113,10 +114,29 @@ func (c *connector) SendGCode(printer *Printer, command string) error {
 			defer h.Disconnect()
 
 			// Send the GCode command to the printer
-			if err := h.SendGCode(command); err != nil {
-				return err
+			if tool_1_temperature > 0 {
+				if err := h.SetToolTemperature(0, tool_1_temperature); err != nil {
+					return err
+				}
 			}
-
+			if tool_2_temperature > 0 {
+				if err := h.SetToolTemperature(1, tool_2_temperature); err != nil {
+					return err
+				}
+			}
+			if bed_temperature > 0 {
+				if err := h.SetBedTemperature(0, bed_temperature); err != nil {
+					return err
+				}
+				if err := h.SetBedTemperature(1, bed_temperature); err != nil {
+					return err
+				}
+			}
+			if home {
+				if err := h.Home(); err != nil {
+					return err
+				}
+			}
 			// Return nil if successful
 			return nil
 		}

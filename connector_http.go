@@ -104,15 +104,21 @@ func (hc *HTTPConnector) Disconnect() (err error) {
 	return
 }
 
-func (hc *HTTPConnector) SendGCode(command string) (err error) {
-	// *** UNTESTED ***
-	r, err := hc.request().SetFormData(map[string]string{"command": command}).Post(hc.URL("/command"))
-	if err != nil {
-		return
-	}
-	if r.StatusCode != 200 {
-		err = fmt.Errorf("command error %d", r.StatusCode)
-	}
+func (hc *HTTPConnector) SetToolTemperature(tool int, temperature int) (err error) {
+	// *** NOT IMPLEMENTED ***
+	err = fmt.Errorf("not implemented")
+	return
+}
+
+func (hc *HTTPConnector) SetBedTemperature(tool int, temperature int) (err error) {
+	// *** NOT IMPLEMENTED ***
+	err = fmt.Errorf("not implemented")
+	return
+}
+
+func (hc *HTTPConnector) Home() (err error) {
+	// *** NOT IMPLEMENTED ***
+	err = fmt.Errorf("not implemented")
 	return
 }
 
