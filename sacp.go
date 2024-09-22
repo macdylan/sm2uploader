@@ -228,6 +228,87 @@ func SACP_read(conn net.Conn, timeout time.Duration) (*SACP_pack, error) {
 	return &sacp, err
 }
 
+var sequence uint16 = 2
+
+func SACP_set_tool_temperature(conn net.Conn, tool_id uint8, temperature uint16, timeout time.Duration) error {
+	data := bytes.Buffer{}
+
+	data.WriteByte(0x08)
+
+	// Tool ID, starting at 0x00
+	data.WriteByte(tool_id)
+
+	// Temperature
+	writeLE(&data, uint16(temperature))
+
+	return SACP_send_command(conn, 0x10, 0x02, data, timeout)
+}
+
+func SACP_set_bed_temperature(conn net.Conn, tool_id uint8, temperature uint16, timeout time.Duration) error {
+	data := bytes.Buffer{}
+
+	data.WriteByte(0x05)
+
+	// Tool ID, starting at 0x00
+	data.WriteByte(tool_id)
+
+	// Temperature
+	writeLE(&data, uint16(temperature))
+
+	return SACP_send_command(conn, 0x14, 0x02, data, timeout)
+}
+
+func SACP_home(conn net.Conn, timeout time.Duration) error {
+	data := bytes.Buffer{}
+	data.WriteByte(0x00)
+
+	// 0x31 is also used when homing in Luban???
+	// 0x35 homes everything
+	return SACP_send_command(conn, 0x01, 0x35, data, timeout)
+}
+
+func SACP_send_command(conn net.Conn, command_set uint8, command_id uint8, data bytes.Buffer, timeout time.Duration) error {
+
+	sequence++
+
+	conn.SetWriteDeadline(time.Now().Add(timeout))
+	_, err := conn.Write(SACP_pack{
+		ReceiverID: 1,
+		SenderID:   0,
+		Attribute:  0,
+		Sequence:   sequence,
+		CommandSet: command_set,
+		CommandID:  command_id,
+		Data:       data.Bytes(),
+	}.Encode())
+
+	if err != nil {
+		return err
+	}
+
+	if Debug {
+		log.Printf("-- Sequence: %d Sent GCode: %x", sequence, data.Bytes())
+	}
+
+	for {
+		conn.SetReadDeadline(time.Now().Add(timeout))
+		p, err := SACP_read(conn, timeout)
+		if err != nil {
+			return err
+		}
+
+		if Debug {
+			log.Printf("-- Got reply from printer: %v", p)
+		}
+
+		if p.Sequence == sequence && p.CommandSet == command_set && p.CommandID == command_id {
+			if len(p.Data) == 1 && p.Data[0] == 0 {
+				return nil
+			}
+		}
+	}
+}
+
 func SACP_start_upload(conn net.Conn, filename string, gcode []byte, timeout time.Duration) error {
 	// prepare data for upload begin packet
 	package_count := uint16((len(gcode) / SACP_data_len) + 1)

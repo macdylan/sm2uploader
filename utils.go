@@ -126,6 +126,15 @@ func shouldBeFix(fpath string) bool {
 	return SmFixExtensions[ext]
 }
 
+func parseIntEnv(key string, defaultValue int) int {
+	if value, ok := os.LookupEnv(key); ok {
+		if v, err := strconv.Atoi(value); err == nil {
+			return v
+		}
+	}
+	return defaultValue
+}
+
 func parseBoolEnv(key string, defaultValue bool) bool {
 	if value, ok := os.LookupEnv(key); ok {
 		if v, err := strconv.ParseBool(value); err == nil {

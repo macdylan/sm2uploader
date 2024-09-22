@@ -104,6 +104,24 @@ func (hc *HTTPConnector) Disconnect() (err error) {
 	return
 }
 
+func (hc *HTTPConnector) SetToolTemperature(tool int, temperature int) (err error) {
+	// *** NOT IMPLEMENTED ***
+	err = fmt.Errorf("not implemented")
+	return
+}
+
+func (hc *HTTPConnector) SetBedTemperature(tool int, temperature int) (err error) {
+	// *** NOT IMPLEMENTED ***
+	err = fmt.Errorf("not implemented")
+	return
+}
+
+func (hc *HTTPConnector) Home() (err error) {
+	// *** NOT IMPLEMENTED ***
+	err = fmt.Errorf("not implemented")
+	return
+}
+
 func (hc *HTTPConnector) Upload(payload *Payload) (err error) {
 	finished := make(chan empty, 1)
 	defer func() {

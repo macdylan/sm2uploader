@@ -69,6 +69,21 @@ func (sc *SACPConnector) Upload(payload *Payload) (err error) {
 	return
 }
 
+func (sc *SACPConnector) SetToolTemperature(tool_id int, temperature int) (err error) {
+	err = SACP_set_tool_temperature(sc.conn, uint8(tool_id), uint16(temperature), SACPTimeout*time.Second)
+	return
+}
+
+func (sc *SACPConnector) SetBedTemperature(tool_id int, temperature int) (err error) {
+	err = SACP_set_bed_temperature(sc.conn, uint8(tool_id), uint16(temperature), SACPTimeout*time.Second)
+	return
+}
+
+func (sc *SACPConnector) Home() (err error) {
+	err = SACP_home(sc.conn, SACPTimeout*time.Second)
+	return
+}
+
 func init() {
 	Connector.RegisterHandler(&SACPConnector{})
 }
