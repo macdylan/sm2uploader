@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -16,11 +17,16 @@ const (
 )
 
 var (
-	noTrim    = false
-	noShutoff = false
-	// noPreheat        = false
-	// noReinforceTower = false
-	noReplaceTool = false
+	fixShutoff        = true
+	fixPreheat        = true
+	fixReinforceTower = true
+	fixReplaceTool    = true
+
+	// userAgent: OrcaSlicer/01.09.03.50
+	// userAgent: BBL-Slicer/v01.09.03.50 (dark) Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)
+	// userAgent: PrusaSlicer/2.6.0+arm64 (3.10.2-202402201133)
+	// userAgent: PrusaSlicer/2.8.0+MacOS-arm64
+	reUserAgent = regexp.MustCompile(`^(\w+)/(\S+)(?:[+-].*)?$`)
 )
 
 type stats struct {
@@ -128,6 +134,7 @@ func startOctoPrintServer(listenAddr string, printer *Printer) error {
 
 		// read X-Api-Key header
 		apiKey := r.Header.Get("X-Api-Key")
+		apiKey = testUserAgent(r.Header.Get("User-Agent"), apiKey)
 		if len(apiKey) > 5 {
 			argumentsFromApi(apiKey)
 		}
@@ -202,28 +209,57 @@ func bedRequestResponse(w http.ResponseWriter, err string) {
 }
 
 func argumentsFromApi(str string) {
-	noTrim = strings.Contains(str, "notrim")
-	// noPreheat = strings.Contains(str, "nopreheat")
-	noShutoff = strings.Contains(str, "noshutoff")
-	// noReinforceTower = strings.Contains(str, "noreinforcetower")
-	noReplaceTool = strings.Contains(str, "noreplacetool")
-	msg := []string{}
-	if noTrim {
-		msg = append(msg, "-notrim")
+	if strings.TrimSpace(str) == "" {
+		return
 	}
-	// if noPreheat {
-	// 	msg = append(msg, "-nopreheat")
-	// }
-	if noShutoff {
+	fixPreheat = !strings.Contains(str, "nopreheat")
+	fixShutoff = !strings.Contains(str, "noshutoff")
+	fixReinforceTower = !strings.Contains(str, "noreinforcetower")
+	fixReplaceTool = !strings.Contains(str, "noreplacetool")
+
+	msg := []string{}
+	if fixPreheat {
+		msg = append(msg, "-preheat")
+	} else {
+		msg = append(msg, "-nopreheat")
+	}
+	if fixShutoff {
+		msg = append(msg, "-shutoff")
+	} else {
 		msg = append(msg, "-noshutoff")
 	}
-	// if noReinforceTower {
-	// 	msg = append(msg, "-noreinforcetower")
-	// }
-	if noReplaceTool {
+	if fixReinforceTower {
+		msg = append(msg, "-reinforcetower")
+	} else {
+		msg = append(msg, "-noreinforcetower")
+	}
+	if fixReplaceTool {
+		msg = append(msg, "-replacetool")
+	} else {
 		msg = append(msg, "-noreplacetool")
 	}
 	if len(msg) > 0 {
 		log.Printf("SMFix with args: %s", strings.Join(msg, " "))
 	}
+}
+
+func testUserAgent(userAgent, apiKey string) string {
+	matches := reUserAgent.FindStringSubmatch(userAgent)
+	if len(matches) >= 2 {
+		slicerName := matches[1]
+		slicerVersion := matches[2]
+		if (slicerName == "PrusaSlicer" && slicerVersion >= "2.8.0") || (slicerName == "OrcaSlicer" && slicerVersion >= "2.1.1") {
+			if !strings.Contains(apiKey, "nopreheat") && strings.Contains(apiKey, "preheat") {
+				apiKey = strings.Replace(apiKey, "preheat", "nopreheat", -1)
+			} else {
+				apiKey += ";nopreheat;"
+			}
+			if !strings.Contains(apiKey, "noreinforcetower") && strings.Contains(apiKey, "reinforceTower") {
+				apiKey = strings.Replace(apiKey, "reinforceTower", "noreinforcetower", -1)
+			} else {
+				apiKey += ";noreinforcetower;"
+			}
+		}
+	}
+	return apiKey
 }

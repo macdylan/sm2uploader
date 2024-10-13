@@ -80,21 +80,18 @@ func postProcess(r io.Reader) (out []byte, err error) {
 	if !isFixed {
 		funcs := []fix.GcodeModifier{}
 
-		if !noTrim {
-			// funcs = append(funcs, fix.GcodeTrimLines)
-		}
-		if !noShutoff {
+		if fixShutoff {
 			funcs = append(funcs, fix.GcodeFixShutoff)
 		}
-		// if !noPreheat {
-		// 	funcs = append(funcs, fix.GcodeFixPreheat)
-		// }
-		if !noReplaceTool {
+		if fixPreheat {
+			funcs = append(funcs, fix.GcodeFixPreheat)
+		}
+		if fixReplaceTool {
 			funcs = append(funcs, fix.GcodeReplaceToolNum)
 		}
-		// if !noReinforceTower {
-		// 	funcs = append(funcs, fix.GcodeReinforceTower)
-		// }
+		if fixReinforceTower {
+			funcs = append(funcs, fix.GcodeReinforceTower)
+		}
 
 		funcs = append(funcs, fix.GcodeFixOrcaToolUnload)
 
