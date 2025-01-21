@@ -21,6 +21,7 @@ type Payload struct {
 	File io.Reader
 	Name string
 	Size int64
+	Print bool
 }
 
 func (p *Payload) SetName(name string) {
@@ -45,11 +46,12 @@ func (p *Payload) ShouldBeFix() bool {
 	return shouldBeFix(p.Name)
 }
 
-func NewPayload(file io.Reader, name string, size int64) *Payload {
+func NewPayload(file io.Reader, name string, size int64, print bool) *Payload {
 	return &Payload{
 		File: file,
 		Name: normalizedFilename(name),
 		Size: size,
+		Print: print,
 	}
 }
 

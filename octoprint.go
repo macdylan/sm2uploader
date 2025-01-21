@@ -126,6 +126,9 @@ func startOctoPrintServer(listenAddr string, printer *Printer) error {
 		}
 		defer file.Close()
 
+		// Get print parameter if they upload+print the file
+		startPrint := r.FormValue("print") == "true"
+
 		// read X-Api-Key header
 		apiKey := r.Header.Get("X-Api-Key")
 		if len(apiKey) > 5 {
@@ -133,7 +136,7 @@ func startOctoPrintServer(listenAddr string, printer *Printer) error {
 		}
 
 		// Send the stream to the printer
-		payload := NewPayload(file, fd.Filename, fd.Size)
+		payload := NewPayload(file, fd.Filename, fd.Size, startPrint)
 		if err := Connector.Upload(printer, payload); err != nil {
 			_stats.addFailure(payload.Name, payload.Size)
 			internalServerErrorResponse(w, err.Error())

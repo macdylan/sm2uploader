@@ -183,7 +183,7 @@ func main() {
 			log.Panicf("File %s does not exist\n", file)
 		} else {
 			f, _ := os.Open(file)
-			_Payloads = append(_Payloads, NewPayload(f, st.Name(), st.Size()))
+			_Payloads = append(_Payloads, NewPayload(f, st.Name(), st.Size(), false))
 		}
 	}
 

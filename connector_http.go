@@ -186,7 +186,17 @@ func (hc *HTTPConnector) Upload(payload *Payload) (err error) {
 		}
 	}, 35*time.Millisecond)
 
-	_, err = r.Post(hc.URL("/upload"))
+	if payload.Print {
+		_, err = r.Post(hc.URL("/prepare_print"))
+		if err == nil {
+			log.Printf("Print job prepared: %s", err)
+			startPrintRequest := hc.request(0)
+			startPrintRequest.SetFormData(map[string]string{"type": "3DP"})
+			_, err = startPrintRequest.Post(hc.URL("/start_print"))
+		}
+	} else {
+		_, err = r.Post(hc.URL("/upload"))
+	}
 	return
 }
 
