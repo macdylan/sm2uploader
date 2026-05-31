@@ -1,52 +1,62 @@
-DIST = dist/
-NAME = sm2uploader
-ifeq "$(GITHUB_REF_NAME)" ""
-    VERSION := -X 'main.Version=$(shell git rev-parse --short HEAD)'
-else
-	VERSION := -X 'main.Version=$(GITHUB_REF_NAME)'
-endif
-FLAGS = -ldflags="-w -s $(VERSION)"
-CMD = go build -trimpath $(FLAGS)
-SRC = $(shell ls *.go | grep -v _test.go)
-EXT_FILES = README.md README.zh-cn.md LICENSE
+DIST     := dist/
+NAME     := sm2uploader
+GIT_REF  := $(or $(GITHUB_REF_NAME),$(shell git rev-parse --short HEAD))
+VERSION  := -X 'main.Version=$(GIT_REF)'
+FLAGS    := -ldflags="-w -s $(VERSION)"
+CMD      := go build -trimpath $(FLAGS)
+SRC      := $(wildcard *.go)
+EXTRA    := README.md README.zh-cn.md LICENSE
 
-.PHONY: all clean dep darwin-arm64 darwin-amd64 linux-amd64 linux-arm7 linux-arm6 win64 win32
+# Platform targets: <os>-<arch>[-<arm>]
+PLATFORMS := \
+	darwin-arm64 \
+	darwin-amd64 \
+	linux-amd64 \
+	linux-arm7 \
+	linux-arm6 \
+	windows-amd64 \
+	windows-386
 
-darwin-arm64: $(SRC)
-	GOOS=darwin GOARCH=arm64 $(CMD) -o $(DIST)$(NAME)-$@ $^
+.PHONY: all all-zip clean dep $(PLATFORMS)
 
-darwin-amd64: $(SRC)
-	GOOS=darwin GOARCH=amd64 $(CMD) -o $(DIST)$(NAME)-$@ $^
+# ---- Build rules ----
 
-linux-amd64: $(SRC)
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(CMD) -o $(DIST)$(NAME)-$@ $^
+darwin-arm64:
+	GOOS=darwin  GOARCH=arm64  $(CMD) -o $(DIST)$(NAME)-$@ $(SRC)
 
-linux-arm7: $(SRC)
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 $(CMD) -o $(DIST)$(NAME)-$@ $^
+darwin-amd64:
+	GOOS=darwin  GOARCH=amd64  $(CMD) -o $(DIST)$(NAME)-$@ $(SRC)
 
-linux-arm6: $(SRC)
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=6 $(CMD) -o $(DIST)$(NAME)-$@ $^
+linux-amd64:
+	CGO_ENABLED=0 GOOS=linux  GOARCH=amd64  $(CMD) -o $(DIST)$(NAME)-$@ $(SRC)
 
-win64: $(SRC)
-	GOOS=windows GOARCH=amd64 $(CMD) -o $(DIST)$(NAME)-$@.exe $^
+linux-arm7:
+	CGO_ENABLED=0 GOOS=linux  GOARCH=arm  GOARM=7  $(CMD) -o $(DIST)$(NAME)-$@ $(SRC)
 
-win32: $(SRC)
-	GOOS=windows GOARCH=386 $(CMD) -o $(DIST)$(NAME)-$@.exe $^
+linux-arm6:
+	CGO_ENABLED=0 GOOS=linux  GOARCH=arm  GOARM=6  $(CMD) -o $(DIST)$(NAME)-$@ $(SRC)
 
-dep: # Get the dependencies
+windows-amd64:
+	GOOS=windows GOARCH=amd64 $(CMD) -o $(DIST)$(NAME)-$@.exe $(SRC)
+
+windows-386:
+	GOOS=windows GOARCH=386   $(CMD) -o $(DIST)$(NAME)-$@.exe $(SRC)
+
+# ---- Meta targets ----
+
+dep:
 	go mod download
 
-all: dep darwin-arm64 win64 win32 darwin-amd64 linux-amd64 linux-arm7 linux-arm6
-	@true
+all: dep $(PLATFORMS)
 
 all-zip: all
-	for p in darwin-arm64 win64.exe win32.exe darwin-amd64 linux-amd64 linux-arm7 linux-arm6; do \
-		if [ "$$p" = "win64.exe" -o "$$p" = "win32.exe" ]; then \
-			zip -j $(DIST)$(NAME)-$$p.zip $(DIST)$(NAME)-$$p $(EXT_FILES) *.bat; \
+	@for p in darwin-arm64 darwin-amd64 linux-amd64 linux-arm7 linux-arm6 windows-amd64.exe windows-386.exe; do \
+		if [ "$${p%.exe}" != "$$p" ]; then \
+			zip -j $(DIST)$(NAME)-$$p.zip $(DIST)$(NAME)-$$p $(EXTRA) *.bat; \
 		else \
-			zip -j $(DIST)$(NAME)-$$p.zip $(DIST)$(NAME)-$$p $(EXT_FILES); \
+			zip -j $(DIST)$(NAME)-$$p.zip $(DIST)$(NAME)-$$p $(EXTRA); \
 		fi \
 	done
 
 clean:
-	rm -f $(DIST)$(NAME)-*
+	rm -rf $(DIST)$(NAME)-*

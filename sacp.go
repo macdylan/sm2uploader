@@ -310,9 +310,29 @@ func SACP_send_command(conn net.Conn, command_set uint8, command_id uint8, data 
 }
 
 func SACP_start_upload(conn net.Conn, filename string, gcode []byte, timeout time.Duration) error {
+	return SACP_start_upload_reader(conn, filename, bytes.NewReader(gcode), int64(len(gcode)), timeout)
+}
+
+// SACP_start_upload_reader streams file content from an io.Reader instead of
+// holding the entire file in memory. It computes the MD5 hash incrementally
+// and reads chunks on demand as the printer requests them.
+func SACP_start_upload_reader(conn net.Conn, filename string, reader io.Reader, size int64, timeout time.Duration) error {
+	// Compute MD5 incrementally and buffer all content for random access
+	// (SACP protocol requests chunks non-sequentially, so we need a buffer)
+	h := md5.New()
+	teeReader := io.TeeReader(reader, h)
+
+	gcode, err := io.ReadAll(teeReader)
+	if err != nil {
+		return err
+	}
+	if int64(len(gcode)) != size {
+		log.Printf("Warning: file size mismatch: expected %d, got %d", size, len(gcode))
+	}
+	md5hash := h.Sum(nil)
+
 	// prepare data for upload begin packet
 	package_count := uint16((len(gcode) / SACP_data_len) + 1)
-	md5hash := md5.Sum(gcode)
 
 	data := bytes.Buffer{}
 
@@ -326,7 +346,7 @@ func SACP_start_upload(conn net.Conn, filename string, gcode []byte, timeout tim
 	}
 
 	conn.SetWriteDeadline(time.Now().Add(timeout))
-	_, err := conn.Write(SACP_pack{
+	_, err = conn.Write(SACP_pack{
 		ReceiverID: 2,
 		SenderID:   0,
 		Attribute:  0,

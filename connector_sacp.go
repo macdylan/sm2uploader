@@ -48,14 +48,19 @@ func (sc *SACPConnector) Disconnect() error {
 }
 
 func (sc *SACPConnector) Upload(payload *Payload) (err error) {
-	content, err := payload.GetContent(NoFix)
-	if !NoFix {
-		if err != nil {
-			log.Printf("G-Code fix error(ignored): %s", err)
-		} else if payload.ShouldBeFix() {
-			log.Printf("G-Code fixed")
+	rc, err := payload.StreamContent(NoFix)
+	if !NoFix && err == nil && payload.ShouldBeFix() {
+		log.Printf("G-Code fixed")
+	} else if err != nil {
+		log.Printf("G-Code fix error(ignored): %s", err)
+	}
+	if err != nil {
+		// If StreamContent returned an error but we can fall back to raw file
+		if rc == nil {
+			return err
 		}
 	}
+	defer rc.Close()
 
 	w := uilive.New()
 	w.Start()
@@ -65,7 +70,7 @@ func (sc *SACPConnector) Upload(payload *Payload) (err error) {
 		log.SetOutput(os.Stderr)
 	}()
 
-	err = SACP_start_upload(sc.conn, payload.Name, content, SACPTimeout*time.Second)
+	err = SACP_start_upload_reader(sc.conn, payload.Name, rc, payload.Size, SACPTimeout*time.Second)
 	return
 }
 

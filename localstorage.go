@@ -9,6 +9,8 @@ import (
 type LocalStorage struct {
 	Printers []*Printer `yaml:"printers"`
 	savePath string
+	byID     map[string]*Printer
+	byIP     map[string]*Printer
 }
 
 func NewLocalStorage(savePath string) *LocalStorage {
@@ -21,35 +23,51 @@ func NewLocalStorage(savePath string) *LocalStorage {
 		yaml.Unmarshal(b, &s)
 	}
 
+	s.rebuildIndex()
 	return s
+}
+
+func (ls *LocalStorage) rebuildIndex() {
+	ls.byID = make(map[string]*Printer, len(ls.Printers))
+	ls.byIP = make(map[string]*Printer, len(ls.Printers))
+	for _, p := range ls.Printers {
+		if p.ID != "" {
+			ls.byID[p.ID] = p
+		}
+		if p.IP != "" {
+			ls.byIP[p.IP] = p
+		}
+	}
 }
 
 // Add to add printers to LocalStorage
 func (ls *LocalStorage) Add(printers ...*Printer) {
-	// Iterate over each printer
 	for _, p := range printers {
-		// Skip if printer ID is empty
 		if p.ID == "" {
 			continue
 		}
-		// Iterate over each printer in LocalStorage
-		for idx, x := range ls.Printers {
-			// If printer ID matches, update IP and Token if necessary
-			if x.ID == p.ID {
-				if x.IP != p.IP {
-					ls.Printers[idx].IP = p.IP
+		if existing, ok := ls.byID[p.ID]; ok {
+			// Printer already exists, update fields
+			if existing.IP != p.IP {
+				if existing.IP != "" {
+					delete(ls.byIP, existing.IP)
 				}
-				if p.Token != "" && x.Token != p.Token {
-					ls.Printers[idx].Token = p.Token
+				existing.IP = p.IP
+				if p.IP != "" {
+					ls.byIP[p.IP] = existing
 				}
-				// Go to exists label
-				goto exists
+			}
+			if p.Token != "" && existing.Token != p.Token {
+				existing.Token = p.Token
+			}
+		} else {
+			// New printer
+			ls.Printers = append(ls.Printers, p)
+			ls.byID[p.ID] = p
+			if p.IP != "" {
+				ls.byIP[p.IP] = p
 			}
 		}
-		// Append printer to LocalStorage
-		ls.Printers = append(ls.Printers, p)
-		// Label for when printer already exists
-	exists:
 	}
 }
 
@@ -61,10 +79,11 @@ func (ls *LocalStorage) Save() (err error) {
 }
 
 func (ls *LocalStorage) Find(host string) *Printer {
-	for _, p := range ls.Printers {
-		if p.ID == host || p.IP == host {
-			return p
-		}
+	if p, ok := ls.byID[host]; ok {
+		return p
+	}
+	if p, ok := ls.byIP[host]; ok {
+		return p
 	}
 	return nil
 }

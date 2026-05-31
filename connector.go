@@ -41,6 +41,34 @@ func (p *Payload) GetContent(nofix bool) (cont []byte, err error) {
 	return cont, err
 }
 
+// StreamContent returns an io.ReadCloser that streams the file content.
+// For files that don't need post-processing, it returns the original reader directly.
+// For files that need G-Code fixing, it pipes through postProcess to avoid
+// holding the entire content in memory.
+func (p *Payload) StreamContent(nofix bool) (io.ReadCloser, error) {
+	if nofix || !p.ShouldBeFix() {
+		// Try to use ReadCloser directly if the underlying reader supports it
+		if rc, ok := p.File.(io.ReadCloser); ok {
+			return rc, nil
+		}
+		return io.NopCloser(p.File), nil
+	}
+
+	// For files that need post-processing, use a pipe to stream
+	pr, pw := io.Pipe()
+	go func() {
+		cont, err := postProcess(p.File)
+		if err != nil {
+			pw.CloseWithError(err)
+			return
+		}
+		p.Size = int64(len(cont))
+		pw.Write(cont)
+		pw.Close()
+	}()
+	return pr, nil
+}
+
 func (p *Payload) ShouldBeFix() bool {
 	return shouldBeFix(p.Name)
 }

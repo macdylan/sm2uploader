@@ -155,22 +155,17 @@ func (hc *HTTPConnector) Upload(payload *Payload) (err error) {
 		ParamName: "file",
 		FileName:  payload.Name,
 		GetFileContent: func() (io.ReadCloser, error) {
-			pr, pw := io.Pipe()
-			go func() {
-				defer pw.Close()
-				content, err := payload.GetContent(NoFix)
-				if !NoFix {
-					log.SetOutput(os.Stderr)
-					if err != nil {
-						log.Printf("G-Code fix error(ignored): %s", err)
-					} else if payload.ShouldBeFix() {
-						log.Printf("G-Code fixed")
-					}
-					log.SetOutput(w)
-				}
-				pw.Write(content)
-			}()
-			return pr, nil
+			rc, err := payload.StreamContent(NoFix)
+			if !NoFix && err == nil && payload.ShouldBeFix() {
+				log.SetOutput(os.Stderr)
+				log.Printf("G-Code fixed")
+				log.SetOutput(w)
+			} else if err != nil {
+				log.SetOutput(os.Stderr)
+				log.Printf("G-Code fix error(ignored): %s", err)
+				log.SetOutput(w)
+			}
+			return rc, err
 		},
 		FileSize: payload.Size,
 		// ContentType: "application/octet-stream",
