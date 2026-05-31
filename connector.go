@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"os"
 	"time"
 )
 
@@ -18,9 +19,10 @@ var (
 )
 
 type Payload struct {
-	File io.Reader
-	Name string
-	Size int64
+	File      io.Reader
+	Name      string
+	Size      int64
+	FixedFile string // path to the fixed (processed) file for streaming upload
 }
 
 func (p *Payload) SetName(name string) {
@@ -43,8 +45,9 @@ func (p *Payload) GetContent(nofix bool) (cont []byte, err error) {
 
 // StreamContent returns an io.ReadCloser that streams the file content.
 // For files that don't need post-processing, it returns the original reader directly.
-// For files that need G-Code fixing, it pipes through postProcess to avoid
-// holding the entire content in memory.
+// For files that need G-Code fixing and have a FixedFile on disk, it opens the
+// fixed file for streaming to release memory pressure.
+// Otherwise, it pipes through postProcess.
 func (p *Payload) StreamContent(nofix bool) (io.ReadCloser, error) {
 	if nofix || !p.ShouldBeFix() {
 		// Try to use ReadCloser directly if the underlying reader supports it
@@ -52,6 +55,18 @@ func (p *Payload) StreamContent(nofix bool) (io.ReadCloser, error) {
 			return rc, nil
 		}
 		return io.NopCloser(p.File), nil
+	}
+
+	// If a fixed file was pre-saved to disk, stream from it directly
+	if p.FixedFile != "" {
+		f, err := os.Open(p.FixedFile)
+		if err != nil {
+			return nil, err
+		}
+		if fi, err := f.Stat(); err == nil {
+			p.Size = fi.Size()
+		}
+		return f, nil
 	}
 
 	// For files that need post-processing, use a pipe to stream

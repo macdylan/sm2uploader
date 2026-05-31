@@ -48,6 +48,8 @@ func (sc *SACPConnector) Disconnect() error {
 }
 
 func (sc *SACPConnector) Upload(payload *Payload) (err error) {
+	log.Printf("Uploading via SACP protocol")
+
 	rc, err := payload.StreamContent(NoFix)
 	if !NoFix && err == nil && payload.ShouldBeFix() {
 		log.Printf("G-Code fixed")

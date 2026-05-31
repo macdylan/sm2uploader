@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"flag"
+	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -23,6 +25,7 @@ var (
 	Home                bool
 	NoFix               bool
 	Debug               bool
+	OutputDir           string
 
 	_Payloads       []*Payload
 	SmFixExtensions = map[string]bool{
@@ -60,6 +63,7 @@ func main() {
 	flag.BoolVar(&Home, "home", parseBoolEnv("HOME", false), "home the printer")
 	flag.DurationVar(&DiscoverTimeout, "timeout", parseDurationEnv("TIMEOUT", 4*time.Second), "printer discovery timeout")
 	flag.BoolVar(&NoFix, "nofix", parseBoolEnv("NOFIX", false), "disable SMFix(built-in)")
+	flag.StringVar(&OutputDir, "output", os.Getenv("OUTPUT_DIR"), "output directory to save original and fixed files")
 	flag.BoolVar(&Debug, "debug", parseBoolEnv("DEBUG", false), "debug mode")
 
 	flag.Usage = flag_usage
@@ -70,7 +74,11 @@ func main() {
 	}
 
 	if NoFix {
-		log.Println("smfix disabled")
+		log.Println("!! smfix has been disabled")
+	}
+
+	if OutputDir != "" {
+		log.Printf("Output dir: %s", OutputDir)
 	}
 
 	var printer *Printer
@@ -201,6 +209,36 @@ func main() {
 	for _, p := range _Payloads {
 		if envFilename != "" {
 			p.SetName(filepath.Base(envFilename))
+		}
+
+		// If output directory is specified and the file needs fixing,
+		// pre-process it and save both original and fixed files to disk.
+		// Then set FixedFile so StreamContent can stream from disk instead
+		// of holding the entire content in memory.
+		if OutputDir != "" && p.ShouldBeFix() && !NoFix {
+			// Read original content first (we need to save it before postProcess consumes the reader)
+			origContent, readErr := io.ReadAll(p.File)
+			if readErr != nil {
+				log.Printf("Warning: failed to read '%s' for output: %s", p.Name, readErr)
+			} else {
+				fixedContent, procErr := postProcess(bytes.NewReader(origContent))
+				if procErr != nil {
+					log.Printf("Warning: failed to post-process '%s' for output: %s", p.Name, procErr)
+				} else {
+					fixedPath, saveErr := saveToOutputDir(p.Name, bytes.NewReader(origContent), fixedContent, false)
+					if saveErr != nil {
+						log.Printf("Warning: failed to save to output dir: %s", saveErr)
+					} else if fixedPath != "" {
+						p.FixedFile = fixedPath
+						p.Size = int64(len(fixedContent))
+						log.Printf("Saved fixed: %s/%s_fixed%s",
+							OutputDir, p.Name[:len(p.Name)-len(filepath.Ext(p.Name))], filepath.Ext(p.Name))
+					}
+				}
+			}
+		} else if OutputDir != "" {
+			log.Printf("Skipping output save for '%s' (shouldFix=%v, nofix=%v)",
+				p.Name, p.ShouldBeFix(), NoFix)
 		}
 
 		log.Printf("Uploading file '%s' [%s]...", p.Name, p.ReadableSize())

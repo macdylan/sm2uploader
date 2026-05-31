@@ -76,6 +76,9 @@ func postProcess(r io.Reader) (out []byte, err error) {
 			return nil, err
 		}
 	}
+	if err := sc.Err(); err != nil {
+		return nil, err
+	}
 
 	if !isFixed {
 		funcs := []fix.GcodeModifier{}
@@ -89,9 +92,9 @@ func postProcess(r io.Reader) (out []byte, err error) {
 		if fixReplaceTool {
 			funcs = append(funcs, fix.GcodeReplaceToolNum)
 		}
-		if fixReinforceTower {
-			funcs = append(funcs, fix.GcodeReinforceTower)
-		}
+		// if fixReinforceTower {
+		// 	funcs = append(funcs, fix.GcodeReinforceTower)
+		// }
 
 		funcs = append(funcs, fix.GcodeFixOrcaToolUnload)
 
@@ -116,6 +119,44 @@ func postProcess(r io.Reader) (out []byte, err error) {
 		buf.Write(nl)
 	}
 	return buf.Bytes(), nil
+}
+
+// saveToOutputDir saves the original file content and/or the processed (fixed) file
+// content to the output directory. It returns the path to the fixed file so it
+// can be used later for streaming upload.
+// If saveOriginal is false, only the _fixed file is saved.
+func saveToOutputDir(name string, original io.Reader, fixed []byte, saveOriginal bool) (fixedPath string, err error) {
+	if OutputDir == "" {
+		return "", nil
+	}
+
+	if err := os.MkdirAll(OutputDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create output directory: %w", err)
+	}
+
+	if saveOriginal {
+		// Save original file
+		origPath := filepath.Join(OutputDir, name)
+		origFile, err := os.Create(origPath)
+		if err != nil {
+			return "", fmt.Errorf("failed to save original file: %w", err)
+		}
+		defer origFile.Close()
+		if _, err := io.Copy(origFile, original); err != nil {
+			return "", fmt.Errorf("failed to write original file: %w", err)
+		}
+	}
+
+	// Save fixed (processed) file with _fixed suffix
+	ext := filepath.Ext(name)
+	base := name[:len(name)-len(ext)]
+	fixedName := base + "_fixed" + ext
+	fixedPath = filepath.Join(OutputDir, fixedName)
+	if err := os.WriteFile(fixedPath, fixed, 0644); err != nil {
+		return "", fmt.Errorf("failed to save fixed file: %w", err)
+	}
+
+	return fixedPath, nil
 }
 
 func shouldBeFix(fpath string) bool {

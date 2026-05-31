@@ -3,9 +3,11 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
@@ -141,6 +143,34 @@ func startOctoPrintServer(listenAddr string, printer *Printer) error {
 
 		// Send the stream to the printer
 		payload := NewPayload(file, fd.Filename, fd.Size)
+
+		// If output directory is specified and the file needs fixing,
+		// pre-process it and save both original and fixed files to disk.
+		if OutputDir != "" && payload.ShouldBeFix() && !NoFix {
+			origContent, readErr := io.ReadAll(file)
+			if readErr != nil {
+				log.Printf("Warning: failed to read '%s' for output: %s", payload.Name, readErr)
+			} else {
+				fixedContent, procErr := postProcess(bytes.NewReader(origContent))
+				if procErr != nil {
+					log.Printf("Warning: failed to post-process '%s' for output: %s", payload.Name, procErr)
+				} else {
+					fixedPath, saveErr := saveToOutputDir(payload.Name, bytes.NewReader(origContent), fixedContent, true)
+					if saveErr != nil {
+						log.Printf("Warning: failed to save to output dir: %s", saveErr)
+					} else if fixedPath != "" {
+						payload.FixedFile = fixedPath
+						payload.Size = int64(len(fixedContent))
+						log.Printf("Saved: original -> %s/%s, fixed -> %s/%s_fixed%s",
+							OutputDir, payload.Name, OutputDir, payload.Name[:len(payload.Name)-len(filepath.Ext(payload.Name))], filepath.Ext(payload.Name))
+					}
+				}
+			}
+		} else if OutputDir != "" {
+			log.Printf("Skipping output save for '%s' (shouldFix=%v, nofix=%v)",
+				payload.Name, payload.ShouldBeFix(), NoFix)
+		}
+
 		if err := Connector.Upload(printer, payload); err != nil {
 			_stats.addFailure(payload.Name, payload.Size)
 			internalServerErrorResponse(w, err.Error())
@@ -214,7 +244,7 @@ func argumentsFromApi(str string) {
 	}
 	fixPreheat = !strings.Contains(str, "nopreheat")
 	fixShutoff = !strings.Contains(str, "noshutoff")
-	fixReinforceTower = !strings.Contains(str, "noreinforcetower")
+	// fixReinforceTower = !strings.Contains(str, "noreinforcetower")
 	fixReplaceTool = !strings.Contains(str, "noreplacetool")
 
 	msg := []string{}
@@ -228,11 +258,11 @@ func argumentsFromApi(str string) {
 	} else {
 		msg = append(msg, "-noshutoff")
 	}
-	if fixReinforceTower {
-		msg = append(msg, "-reinforcetower")
-	} else {
-		msg = append(msg, "-noreinforcetower")
-	}
+	// if fixReinforceTower {
+	// 	msg = append(msg, "-reinforcetower")
+	// } else {
+	// 	msg = append(msg, "-noreinforcetower")
+	// }
 	if fixReplaceTool {
 		msg = append(msg, "-replacetool")
 	} else {
@@ -254,11 +284,11 @@ func testUserAgent(userAgent, apiKey string) string {
 			} else {
 				apiKey += ";nopreheat;"
 			}
-			if !strings.Contains(apiKey, "noreinforcetower") && strings.Contains(apiKey, "reinforceTower") {
-				apiKey = strings.Replace(apiKey, "reinforceTower", "noreinforcetower", -1)
-			} else {
-				apiKey += ";noreinforcetower;"
-			}
+		// if !strings.Contains(apiKey, "noreinforcetower") && strings.Contains(apiKey, "reinforceTower") {
+		// 	apiKey = strings.Replace(apiKey, "reinforceTower", "noreinforcetower", -1)
+		// } else {
+		// 	apiKey += ";noreinforcetower;"
+		// }
 		}
 	}
 	return apiKey

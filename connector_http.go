@@ -123,6 +123,7 @@ func (hc *HTTPConnector) Home() (err error) {
 }
 
 func (hc *HTTPConnector) Upload(payload *Payload) (err error) {
+	log.Printf("Uploading via HTTP protocol")
 	finished := make(chan empty, 1)
 	defer func() {
 		finished <- empty{}
