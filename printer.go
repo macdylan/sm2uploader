@@ -7,11 +7,12 @@ import (
 )
 
 type Printer struct {
-	IP    string `yaml:"ip"`
-	ID    string `yaml:"id"`
-	Model string `yaml:"model"`
-	Token string `yaml:"token"`
-	Sacp  bool   `yaml:"sacp"`
+	IP        string `yaml:"ip"`
+	ID        string `yaml:"id"`
+	Model     string `yaml:"model"`
+	Token     string `yaml:"token"`
+	Sacp      bool   `yaml:"sacp"`
+	Moonraker bool   `yaml:"moonraker"` // new device using Moonraker API protocol
 }
 
 /*
@@ -32,11 +33,12 @@ func NewPrinter(resp []byte) (*Printer, error) {
 	)
 
 	return &Printer{
-		IP:    ip,
-		ID:    id,
-		Model: model,
-		Token: "",
-		Sacp:  sacp,
+		IP:        ip,
+		ID:        id,
+		Model:     model,
+		Token:     "",
+		Sacp:      sacp,
+		Moonraker: false,
 	}, nil
 }
 

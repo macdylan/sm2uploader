@@ -150,6 +150,12 @@ func main() {
 		log.Println("Printer Model:", printer.Model)
 	}
 
+	// Moonraker/Klipper devices don't need G-Code fix
+	if printer.Moonraker {
+		NoFix = true
+		log.Println("!! Moonraker device detected, smfix disabled")
+	}
+
 	// Create a channel to listen for signals
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)

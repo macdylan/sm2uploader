@@ -21,7 +21,7 @@ const (
 var (
 	fixShutoff        = true
 	fixPreheat        = true
-	fixReinforceTower = true
+	// fixReinforceTower = true
 	fixReplaceTool    = true
 
 	// userAgent: OrcaSlicer/01.09.03.50
@@ -98,6 +98,8 @@ func startOctoPrintServer(listenAddr string, printer *Printer) error {
 		protocol := "HTTP"
 		if printer.Sacp {
 			protocol = "SACP"
+		} else if printer.Moonraker {
+			protocol = "Moonraker"
 		}
 		resp := `sm2uploader ` + Version + ` - https://github.com/macdylan/sm2uploader` + "\n\n" +
 			`	printer id: ` + printer.ID + "\n" +
@@ -144,9 +146,16 @@ func startOctoPrintServer(listenAddr string, printer *Printer) error {
 		// Send the stream to the printer
 		payload := NewPayload(file, fd.Filename, fd.Size)
 
+		// Moonraker/Klipper devices don't need G-Code fix
+		moonrakerNoFix := printer.Moonraker
+		effectiveNoFix := NoFix || moonrakerNoFix
+		if moonrakerNoFix && !NoFix {
+			log.Printf("Moonraker device detected, skipping G-Code fix for '%s'", payload.Name)
+		}
+
 		// If output directory is specified and the file needs fixing,
 		// pre-process it and save both original and fixed files to disk.
-		if OutputDir != "" && payload.ShouldBeFix() && !NoFix {
+		if OutputDir != "" && payload.ShouldBeFix() && !effectiveNoFix {
 			origContent, readErr := io.ReadAll(file)
 			if readErr != nil {
 				log.Printf("Warning: failed to read '%s' for output: %s", payload.Name, readErr)
@@ -168,7 +177,7 @@ func startOctoPrintServer(listenAddr string, printer *Printer) error {
 			}
 		} else if OutputDir != "" {
 			log.Printf("Skipping output save for '%s' (shouldFix=%v, nofix=%v)",
-				payload.Name, payload.ShouldBeFix(), NoFix)
+				payload.Name, payload.ShouldBeFix(), effectiveNoFix)
 		}
 
 		if err := Connector.Upload(printer, payload); err != nil {
@@ -240,6 +249,11 @@ func bedRequestResponse(w http.ResponseWriter, err string) {
 
 func argumentsFromApi(str string) {
 	if strings.TrimSpace(str) == "" {
+		return
+	}
+	if strings.Contains(str, "nofix") {
+		NoFix = true
+		log.Printf("SMFix disabled via API key (nofix)")
 		return
 	}
 	fixPreheat = !strings.Contains(str, "nopreheat")
