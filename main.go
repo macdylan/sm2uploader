@@ -83,6 +83,16 @@ func main() {
 
 	var printer *Printer
 	ls := NewLocalStorage(KnownHosts)
+	// Persist the token to known hosts as soon as it is (re)obtained on connect,
+	// so it survives restarts even on an unclean exit (the shutdown defer below
+	// only runs on a graceful exit).
+	OnPrinterUpdate = func(p *Printer) {
+		if p == nil {
+			return
+		}
+		ls.Add(p)
+		_ = ls.Save()
+	}
 	defer func() {
 		if printer != nil {
 			// update printer's token
@@ -140,8 +150,9 @@ func main() {
 				printer = printers[0]
 			}
 		} else {
-			// directly to printer using ip/hostname
-			printer = &Printer{IP: Host}
+			// directly to printer using ip/hostname; keep an ID so the token gets
+			// persisted (ls.Add skips ID-less printers)
+			printer = &Printer{IP: Host, ID: Host}
 		}
 	}
 

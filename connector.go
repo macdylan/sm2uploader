@@ -18,6 +18,10 @@ var (
 	errFileTooLarge = errors.New("File is too large.")
 )
 
+// OnPrinterUpdate, if set, is called after a successful connect so the caller
+// can persist the printer's (refreshed) token to disk. Set by main().
+var OnPrinterUpdate func(*Printer)
+
 type Payload struct {
 	File      io.Reader
 	Name      string
@@ -125,6 +129,12 @@ func (c *connector) Upload(printer *Printer, payload *Payload) error {
 				return err
 			}
 			defer h.Disconnect()
+
+			// Persist the (possibly refreshed) token so it survives restarts,
+			// including an unclean exit that skips the shutdown defer.
+			if OnPrinterUpdate != nil {
+				OnPrinterUpdate(printer)
+			}
 
 			if payload.Size > FILE_SIZE_MAX {
 				return errFileTooLarge
