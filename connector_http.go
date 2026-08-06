@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -152,24 +153,54 @@ func (hc *HTTPConnector) Upload(payload *Payload) (err error) {
 		log.SetOutput(os.Stderr)
 	}()
 
-	file := req.FileUpload{
-		ParamName: "file",
-		FileName:  payload.Name,
-		GetFileContent: func() (io.ReadCloser, error) {
-			rc, err := payload.StreamContent(NoFix)
-			if !NoFix && err == nil && payload.ShouldBeFix() {
-				log.SetOutput(os.Stderr)
-				log.Printf("G-Code fixed")
-				log.SetOutput(w)
-			} else if err != nil {
-				log.SetOutput(os.Stderr)
-				log.Printf("G-Code fix error(ignored): %s", err)
-				log.SetOutput(w)
-			}
-			return rc, err
-		},
-		FileSize: payload.Size,
-		// ContentType: "application/octet-stream",
+	var file req.FileUpload
+	if !NoFix && payload.ShouldBeFix() && payload.FixedFile == "" {
+		// FileSize below is captured when the FileUpload struct is built, so it must
+		// already equal the exact number of bytes that will be streamed. For a
+		// post-processed (SMFix) G-Code with no pre-saved fixed file, StreamContent
+		// only learns the fixed size asynchronously in its pipe goroutine -- too
+		// late. payload.Size (the original, pre-fix size) would then be sent as the
+		// Content-Length, the printer receives a size-mismatched upload, silently
+		// discards it and keeps the previously loaded job. Materialize this case up
+		// front so both the streamed content and FileSize are exact.
+		content, cerr := payload.GetContent(NoFix)
+		if cerr != nil {
+			log.SetOutput(os.Stderr)
+			log.Printf("G-Code fix error: %s", cerr)
+			return cerr
+		}
+		log.SetOutput(os.Stderr)
+		log.Printf("G-Code fixed")
+		log.SetOutput(w)
+		file = req.FileUpload{
+			ParamName: "file",
+			FileName:  payload.Name,
+			GetFileContent: func() (io.ReadCloser, error) {
+				return io.NopCloser(bytes.NewReader(content)), nil
+			},
+			FileSize: int64(len(content)),
+		}
+	} else {
+		// Non-fixed uploads, and files already pre-processed to disk (OutputDir),
+		// have a correct payload.Size, so stream them directly.
+		file = req.FileUpload{
+			ParamName: "file",
+			FileName:  payload.Name,
+			GetFileContent: func() (io.ReadCloser, error) {
+				rc, err := payload.StreamContent(NoFix)
+				if !NoFix && err == nil && payload.ShouldBeFix() {
+					log.SetOutput(os.Stderr)
+					log.Printf("G-Code fixed")
+					log.SetOutput(w)
+				} else if err != nil {
+					log.SetOutput(os.Stderr)
+					log.Printf("G-Code fix error(ignored): %s", err)
+					log.SetOutput(w)
+				}
+				return rc, err
+			},
+			FileSize: payload.Size,
+		}
 	}
 	r := hc.request(0)
 	r.SetFileUpload(file)
