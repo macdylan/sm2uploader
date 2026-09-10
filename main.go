@@ -80,6 +80,12 @@ func main() {
 		log.Printf("Output dir: %s", OutputDir)
 	}
 
+	// the output dir doubles as spool location, so it must exist even when
+	// the upload ends up taking the no-fix route
+	if err := ensureOutputDir(); err != nil {
+		log.Printf("Warning: cannot create output dir: %s", err)
+	}
+
 	// clean up spool files leaked by previous runs killed mid-upload
 	sweepStaleSpools()
 

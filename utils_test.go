@@ -311,6 +311,46 @@ func TestSweepStaleSpools(t *testing.T) {
 	}
 }
 
+func TestEnsureOutputDir(t *testing.T) {
+	restoreOutputDir := OutputDir
+	defer func() { OutputDir = restoreOutputDir }()
+
+	// disabled: no-op
+	OutputDir = ""
+	if err := ensureOutputDir(); err != nil {
+		t.Fatalf("ensureOutputDir disabled: %v", err)
+	}
+
+	// missing directory gets created
+	dir := filepath.Join(t.TempDir(), "nested", "out")
+	OutputDir = dir
+	if err := ensureOutputDir(); err != nil {
+		t.Fatalf("ensureOutputDir: %v", err)
+	}
+	if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
+		t.Errorf("output dir not created: %v", err)
+	}
+
+	// spool files can now be created in it (regression: nofix upload with
+	// a fresh -output dir used to fail in os.CreateTemp)
+	if f, err := os.CreateTemp(tempDir(), "sm2upload-*.spool"); err != nil {
+		t.Errorf("CreateTemp in fresh output dir: %v", err)
+	} else {
+		f.Close()
+		os.Remove(f.Name())
+	}
+
+	// parent is a file -> error
+	fileAsParent := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(fileAsParent, []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	OutputDir = filepath.Join(fileAsParent, "sub")
+	if err := ensureOutputDir(); err == nil {
+		t.Error("expected error when parent is a file")
+	}
+}
+
 func TestPreprocessToOutputDirDisabled(t *testing.T) {
 	old := OutputDir
 	OutputDir = ""

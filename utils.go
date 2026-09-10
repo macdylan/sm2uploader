@@ -182,6 +182,16 @@ func shouldBeFix(fpath string) bool {
 	return SmFixExtensions[ext]
 }
 
+// ensureOutputDir creates the output directory when configured, so later
+// use of it as a spool location (see tempDir) cannot fail on a missing
+// path when the upload takes the no-fix route.
+func ensureOutputDir() error {
+	if OutputDir == "" {
+		return nil
+	}
+	return os.MkdirAll(OutputDir, 0755)
+}
+
 // tempDir returns the preferred directory for upload spool files:
 // the SM2UPLOAD_TMPDIR env override, then OutputDir when set, then the
 // system default. /tmp is tmpfs (RAM-backed) on many Linux systems, so
