@@ -1,7 +1,10 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"hash"
 	"io"
 	"log"
 	"mime/multipart"
@@ -86,9 +89,11 @@ func (mc *MoonrakerConnector) Upload(payload *Payload) error {
 // multipart/form-data body to a temporary file instead of building it in
 // memory, so large G-code files never fully reside in RAM. Content-Length
 // is set from the spooled size, avoiding chunked transfer encoding which
-// causes 502 from nginx. A progressReader provides real-time progress.
+// causes 502 from nginx. A SHA256 checksum (computed while spooling) is
+// attached so the server can verify integrity server-side (422 on
+// mismatch). A progressReader provides real-time progress.
 func uploadMoonrakerURL(uploadURL, filename string, content io.Reader) error {
-	spool, err := os.CreateTemp("", "sm2upload-*.multipart")
+	spool, err := os.CreateTemp(tempDir(), "sm2upload-*.multipart")
 	if err != nil {
 		return fmt.Errorf("moonraker create temp file failed: %w", err)
 	}
@@ -98,6 +103,8 @@ func uploadMoonrakerURL(uploadURL, filename string, content io.Reader) error {
 		os.Remove(spoolPath)
 	}()
 
+	hasher := &hashingReader{r: content, h: sha256.New()}
+
 	mw := multipart.NewWriter(spool)
 	if err := mw.WriteField("root", "gcodes"); err != nil {
 		return fmt.Errorf("moonraker write field failed: %w", err)
@@ -106,8 +113,11 @@ func uploadMoonrakerURL(uploadURL, filename string, content io.Reader) error {
 	if err != nil {
 		return fmt.Errorf("moonraker create form file failed: %w", err)
 	}
-	if _, err := io.Copy(fw, content); err != nil {
+	if _, err := io.Copy(fw, hasher); err != nil {
 		return fmt.Errorf("moonraker write file part failed: %w", err)
+	}
+	if err := mw.WriteField("checksum", hex.EncodeToString(hasher.h.Sum(nil))); err != nil {
+		return fmt.Errorf("moonraker write checksum field failed: %w", err)
 	}
 	if err := mw.Close(); err != nil {
 		return fmt.Errorf("moonraker finish multipart body failed: %w", err)
@@ -163,6 +173,21 @@ func uploadMoonrakerURL(uploadURL, filename string, content io.Reader) error {
 
 func (mc *MoonrakerConnector) URL(path string) string {
 	return fmt.Sprintf("http://%s:%s%s", mc.printer.IP, MoonrakerPort, path)
+}
+
+// hashingReader computes a hash while the content streams through,
+// so the SHA256 checksum costs no extra pass over the data.
+type hashingReader struct {
+	r io.Reader
+	h hash.Hash
+}
+
+func (hr *hashingReader) Read(p []byte) (int, error) {
+	n, err := hr.r.Read(p)
+	if n > 0 {
+		hr.h.Write(p[:n])
+	}
+	return n, err
 }
 
 // progressReader wraps an io.Reader and reports progress at intervals.

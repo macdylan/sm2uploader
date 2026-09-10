@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
@@ -92,11 +94,29 @@ func TestMoonrakerUploadBoundedMemory(t *testing.T) {
 
 	var gotLength int64
 	var gotChunked bool
-	var gotBody []byte
+	var gotFileContent []byte
+	var gotChecksumValid bool
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotLength = r.ContentLength
 		gotChunked = r.TransferEncoding != nil && len(r.TransferEncoding) > 0
-		gotBody, _ = io.ReadAll(r.Body)
+		if err := r.ParseMultipartForm(32 << 20); err != nil {
+			t.Errorf("server: parse multipart: %v", err)
+			w.WriteHeader(400)
+			return
+		}
+		if root := r.FormValue("root"); root != "gcodes" {
+			t.Errorf("server: root = %q, want gcodes", root)
+		}
+		file, _, err := r.FormFile("file")
+		if err != nil {
+			t.Errorf("server: form file: %v", err)
+			w.WriteHeader(400)
+			return
+		}
+		defer file.Close()
+		gotFileContent, _ = io.ReadAll(file)
+		sum := sha256.Sum256(gotFileContent)
+		gotChecksumValid = hex.EncodeToString(sum[:]) == r.FormValue("checksum")
 		w.WriteHeader(http.StatusCreated)
 	}))
 	defer srv.Close()
@@ -114,12 +134,11 @@ func TestMoonrakerUploadBoundedMemory(t *testing.T) {
 	if gotChunked {
 		t.Error("request used chunked transfer encoding")
 	}
-	if len(gotBody) != int(gotLength) {
-		t.Errorf("server received %d bytes, Content-Length %d", len(gotBody), gotLength)
+	if !bytes.Equal(gotFileContent, content) {
+		t.Errorf("server received %d bytes, want %d", len(gotFileContent), len(content))
 	}
-	if !bytes.Contains(gotBody, []byte("name=\"root\"")) ||
-		!bytes.Contains(gotBody, []byte("gcodes")) {
-		t.Error("multipart body missing root field")
+	if !gotChecksumValid {
+		t.Error("checksum field missing or does not match file content SHA256")
 	}
 
 	const limit = 64 << 20

@@ -80,6 +80,9 @@ func main() {
 		log.Printf("Output dir: %s", OutputDir)
 	}
 
+	// clean up spool files leaked by previous runs killed mid-upload
+	sweepStaleSpools()
+
 	var printer *Printer
 	ls := NewLocalStorage(KnownHosts)
 	// Persist the token to known hosts as soon as it is (re)obtained on connect,

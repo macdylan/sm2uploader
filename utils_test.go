@@ -250,6 +250,67 @@ func TestPreprocessToOutputDirNoOriginal(t *testing.T) {
 	}
 }
 
+func TestTempDirPrecedence(t *testing.T) {
+	restoreOutputDir := OutputDir
+	defer func() { OutputDir = restoreOutputDir }()
+
+	dir := t.TempDir()
+
+	// env wins over everything
+	OutputDir = dir
+	t.Setenv("SM2UPLOAD_TMPDIR", dir+"/env")
+	if got := tempDir(); got != dir+"/env" {
+		t.Errorf("tempDir = %q, want env override", got)
+	}
+
+	// env beats OutputDir even when both set... env unset -> OutputDir
+	os.Unsetenv("SM2UPLOAD_TMPDIR")
+	if got := tempDir(); got != dir {
+		t.Errorf("tempDir = %q, want OutputDir", got)
+	}
+
+	// neither set -> empty (system default)
+	OutputDir = ""
+	if got := tempDir(); got != "" {
+		t.Errorf("tempDir = %q, want empty", got)
+	}
+}
+
+func TestSweepStaleSpools(t *testing.T) {
+	dir := t.TempDir()
+	stale := []string{
+		filepath.Join(dir, "sm2upload-123.spool"),
+		filepath.Join(dir, "sm2upload-abc.multipart"),
+	}
+	for _, p := range stale {
+		if err := os.WriteFile(p, []byte("junk"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	keep := filepath.Join(dir, "sm2uploadkeep.txt") // prefix without dash: must survive
+	if err := os.WriteFile(keep, []byte("keep"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	keep2 := filepath.Join(dir, "unrelated.gcode")
+	if err := os.WriteFile(keep2, []byte("keep"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("SM2UPLOAD_TMPDIR", dir)
+	sweepStaleSpools()
+
+	for _, p := range stale {
+		if _, err := os.Stat(p); !os.IsNotExist(err) {
+			t.Errorf("stale spool not removed: %s", p)
+		}
+	}
+	for _, p := range []string{keep, keep2} {
+		if _, err := os.Stat(p); err != nil {
+			t.Errorf("sweep removed a file it must not touch: %s", p)
+		}
+	}
+}
+
 func TestPreprocessToOutputDirDisabled(t *testing.T) {
 	old := OutputDir
 	OutputDir = ""

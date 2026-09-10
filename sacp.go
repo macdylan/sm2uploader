@@ -318,7 +318,7 @@ func SACP_send_command(conn net.Conn, command_set uint8, command_id uint8, data 
 func SACP_start_upload_reader(conn net.Conn, filename string, reader io.Reader, size int64, timeout time.Duration) error {
 	h := md5.New()
 
-	spool, err := os.CreateTemp("", "sm2upload-*.spool")
+	spool, err := os.CreateTemp(tempDir(), "sm2upload-*.spool")
 	if err != nil {
 		return err
 	}

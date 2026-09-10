@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -179,6 +180,39 @@ func preprocessToOutputDir(r io.Reader, name string, saveOriginal bool) (fixedPa
 func shouldBeFix(fpath string) bool {
 	ext := strings.ToLower(filepath.Ext(fpath))
 	return SmFixExtensions[ext]
+}
+
+// tempDir returns the preferred directory for upload spool files:
+// the SM2UPLOAD_TMPDIR env override, then OutputDir when set, then the
+// system default. /tmp is tmpfs (RAM-backed) on many Linux systems, so
+// spooling a 1GB+ file must not land there unnoticed on ARM targets.
+func tempDir() string {
+	if d := os.Getenv("SM2UPLOAD_TMPDIR"); d != "" {
+		return d
+	}
+	if OutputDir != "" {
+		return OutputDir
+	}
+	return ""
+}
+
+// sweepStaleSpools removes leftover spool files from previous runs that
+// were killed before their deferred cleanup could run. Only the
+// sm2upload-* prefix is touched.
+func sweepStaleSpools() {
+	dir := tempDir()
+	if dir == "" {
+		dir = os.TempDir()
+	}
+	matches, err := filepath.Glob(filepath.Join(dir, "sm2upload-*"))
+	if err != nil {
+		return
+	}
+	for _, m := range matches {
+		if err := os.Remove(m); err == nil && Debug {
+			log.Printf("-- removed stale spool file: %s", m)
+		}
+	}
 }
 
 func parseIntEnv(key string, defaultValue int) int {
