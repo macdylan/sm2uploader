@@ -1,9 +1,7 @@
 package main
 
 import (
-	"bytes"
 	"flag"
-	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -39,6 +37,7 @@ var (
 func main() {
 	defer func() {
 		if r := recover(); r != nil {
+			log.Printf("Panic: %v", r)
 			os.Exit(2)
 		}
 	}()
@@ -204,12 +203,15 @@ func main() {
 
 	// 检查文件参数是否存在 - Check if the file parameter exists
 	for _, file := range flag.Args() {
-		if st, err := os.Stat(file); os.IsNotExist(err) {
-			log.Panicf("File %s does not exist\n", file)
-		} else {
-			f, _ := os.Open(file)
-			_Payloads = append(_Payloads, NewPayload(f, st.Name(), st.Size()))
+		st, err := os.Stat(file)
+		if err != nil {
+			log.Panicf("File %s is not accessible: %v\n", file, err)
 		}
+		f, err := os.Open(file)
+		if err != nil {
+			log.Panicf("Cannot open %s: %v\n", file, err)
+		}
+		_Payloads = append(_Payloads, NewPayload(f, st.Name(), st.Size()))
 	}
 
 	// 检查是否有传入的文件 - Check if a file has been passed in
@@ -233,25 +235,15 @@ func main() {
 		// Then set FixedFile so StreamContent can stream from disk instead
 		// of holding the entire content in memory.
 		if OutputDir != "" && p.ShouldBeFix() && !NoFix {
-			// Read original content first (we need to save it before postProcess consumes the reader)
-			origContent, readErr := io.ReadAll(p.File)
-			if readErr != nil {
-				log.Printf("Warning: failed to read '%s' for output: %s", p.Name, readErr)
-			} else {
-				fixedContent, procErr := postProcess(bytes.NewReader(origContent))
-				if procErr != nil {
-					log.Printf("Warning: failed to post-process '%s' for output: %s", p.Name, procErr)
-				} else {
-					fixedPath, saveErr := saveToOutputDir(p.Name, bytes.NewReader(origContent), fixedContent, false)
-					if saveErr != nil {
-						log.Printf("Warning: failed to save to output dir: %s", saveErr)
-					} else if fixedPath != "" {
-						p.FixedFile = fixedPath
-						p.Size = int64(len(fixedContent))
-						log.Printf("Saved fixed: %s/%s_fixed%s",
-							OutputDir, p.Name[:len(p.Name)-len(filepath.Ext(p.Name))], filepath.Ext(p.Name))
-					}
+			fixedPath, procErr := preprocessToOutputDir(p.File, p.Name, false)
+			if procErr != nil {
+				log.Printf("Warning: failed to pre-process '%s' for output: %s", p.Name, procErr)
+			} else if fixedPath != "" {
+				p.FixedFile = fixedPath
+				if fi, err := os.Stat(fixedPath); err == nil {
+					p.Size = fi.Size()
 				}
+				log.Printf("Saved fixed: %s", fixedPath)
 			}
 		} else if OutputDir != "" {
 			log.Printf("Skipping output save for '%s' (shouldFix=%v, nofix=%v)",

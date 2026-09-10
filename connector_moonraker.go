@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -19,8 +18,7 @@ const (
 )
 
 type MoonrakerConnector struct {
-	httpClient *http.Client
-	printer    *Printer
+	printer *Printer
 }
 
 func (mc *MoonrakerConnector) Ping(p *Printer) bool {
@@ -71,18 +69,9 @@ func (mc *MoonrakerConnector) Upload(payload *Payload) error {
 		log.SetOutput(os.Stderr)
 		log.Printf("G-Code fix error(ignored): %s", err)
 		log.SetOutput(w)
-		fileContent, readErr := io.ReadAll(payload.File)
-		if readErr != nil {
-			return fmt.Errorf("moonraker read content failed: %w", readErr)
-		}
-		return uploadMoonraker(mc, payload.Name, fileContent)
+		return uploadMoonrakerURL(mc.URL("/server/files/upload"), payload.Name, payload.File)
 	}
 	defer rc.Close()
-
-	fileContent, err := io.ReadAll(rc)
-	if err != nil {
-		return fmt.Errorf("moonraker read content failed: %w", err)
-	}
 
 	if !NoFix && payload.ShouldBeFix() {
 		log.SetOutput(os.Stderr)
@@ -90,29 +79,52 @@ func (mc *MoonrakerConnector) Upload(payload *Payload) error {
 		log.SetOutput(w)
 	}
 
-	return uploadMoonraker(mc, payload.Name, fileContent)
+	return uploadMoonrakerURL(mc.URL("/server/files/upload"), payload.Name, rc)
 }
 
-// uploadMoonraker builds the full multipart/form-data body in memory so
-// Content-Length is set, avoiding chunked transfer encoding which causes
-// 502 from nginx. A progressReader provides real-time upload progress.
-func uploadMoonraker(mc *MoonrakerConnector, filename string, fileContent []byte) error {
-	var buf bytes.Buffer
-	mw := multipart.NewWriter(&buf)
-	mw.WriteField("root", "gcodes")
+// uploadMoonrakerURL is the testable core of uploadMoonraker: it spools the
+// multipart/form-data body to a temporary file instead of building it in
+// memory, so large G-code files never fully reside in RAM. Content-Length
+// is set from the spooled size, avoiding chunked transfer encoding which
+// causes 502 from nginx. A progressReader provides real-time progress.
+func uploadMoonrakerURL(uploadURL, filename string, content io.Reader) error {
+	spool, err := os.CreateTemp("", "sm2upload-*.multipart")
+	if err != nil {
+		return fmt.Errorf("moonraker create temp file failed: %w", err)
+	}
+	spoolPath := spool.Name()
+	defer func() {
+		spool.Close()
+		os.Remove(spoolPath)
+	}()
+
+	mw := multipart.NewWriter(spool)
+	if err := mw.WriteField("root", "gcodes"); err != nil {
+		return fmt.Errorf("moonraker write field failed: %w", err)
+	}
 	fw, err := mw.CreateFormFile("file", filename)
 	if err != nil {
 		return fmt.Errorf("moonraker create form file failed: %w", err)
 	}
-	if _, err := fw.Write(fileContent); err != nil {
+	if _, err := io.Copy(fw, content); err != nil {
 		return fmt.Errorf("moonraker write file part failed: %w", err)
 	}
-	mw.Close()
+	if err := mw.Close(); err != nil {
+		return fmt.Errorf("moonraker finish multipart body failed: %w", err)
+	}
 
-	totalSize := int64(buf.Len())
+	fi, err := spool.Stat()
+	if err != nil {
+		return fmt.Errorf("moonraker stat temp file failed: %w", err)
+	}
+	totalSize := fi.Size()
+
+	if _, err := spool.Seek(0, io.SeekStart); err != nil {
+		return fmt.Errorf("moonraker rewind temp file failed: %w", err)
+	}
 
 	pr := &progressReader{
-		reader:     &buf,
+		reader:     spool,
 		total:      totalSize,
 		lastUpdate: time.Now(),
 		onProgress: func(uploaded int64) {
@@ -125,19 +137,15 @@ func uploadMoonraker(mc *MoonrakerConnector, filename string, fileContent []byte
 		},
 	}
 
-	req, err := http.NewRequest("POST", mc.URL("/server/files/upload"), pr)
+	req, err := http.NewRequest("POST", uploadURL, pr)
 	if err != nil {
 		return fmt.Errorf("moonraker create request failed: %w", err)
 	}
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 	req.ContentLength = totalSize
 
-	client := mc.httpClient
-	if client == nil {
-		client = &http.Client{
-			Timeout: time.Second * time.Duration(MoonrakerTimeout),
-		}
-		mc.httpClient = client
+	client := &http.Client{
+		Timeout: time.Second * time.Duration(MoonrakerTimeout),
 	}
 
 	resp, err := client.Do(req)

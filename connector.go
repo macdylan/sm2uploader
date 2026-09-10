@@ -37,16 +37,6 @@ func (p *Payload) ReadableSize() string {
 	return humanReadableSize(p.Size)
 }
 
-func (p *Payload) GetContent(nofix bool) (cont []byte, err error) {
-	if nofix || !p.ShouldBeFix() {
-		cont, err = io.ReadAll(p.File)
-	} else {
-		cont, err = postProcess(p.File)
-		p.Size = int64(len(cont))
-	}
-	return cont, err
-}
-
 // StreamContent returns an io.ReadCloser that streams the file content.
 // For files that don't need post-processing, it returns the original reader directly.
 // For files that need G-Code fixing and have a FixedFile on disk, it opens the
@@ -73,17 +63,11 @@ func (p *Payload) StreamContent(nofix bool) (io.ReadCloser, error) {
 		return f, nil
 	}
 
-	// For files that need post-processing, use a pipe to stream
+	// For files that need post-processing, stream the fix to the pipe
+	// incrementally instead of buffering the whole output in memory.
 	pr, pw := io.Pipe()
 	go func() {
-		cont, err := postProcess(p.File)
-		if err != nil {
-			pw.CloseWithError(err)
-			return
-		}
-		p.Size = int64(len(cont))
-		pw.Write(cont)
-		pw.Close()
+		pw.CloseWithError(postProcessTo(pw, p.File))
 	}()
 	return pr, nil
 }

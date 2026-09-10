@@ -48,6 +48,20 @@ func postProcessFile(file_path string) (out []byte, err error) {
 */
 
 func postProcess(r io.Reader) (out []byte, err error) {
+	var buf bytes.Buffer
+	if err = postProcessTo(&buf, r); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// postProcessTo parses the g-code from r, applies the SMFix modifiers and
+// streams the result to w. The output is written incrementally so the
+// processed file is never fully buffered in memory.
+// NOTE: the parse stage still holds one GcodeBlock per line in memory
+// (required by the whole-file-context modifiers). Measured costs are
+// documented in AGENTS.md.
+func postProcessTo(w io.Writer, r io.Reader) (err error) {
 	var (
 		isFixed = false
 		nl      = []byte("\n")
@@ -73,11 +87,11 @@ func postProcess(r io.Reader) (out []byte, err error) {
 			continue
 		}
 		if err != fix.ErrEmptyString {
-			return nil, err
+			return err
 		}
 	}
 	if err := sc.Err(); err != nil {
-		return nil, err
+		return err
 	}
 
 	if !isFixed {
@@ -103,59 +117,62 @@ func postProcess(r io.Reader) (out []byte, err error) {
 		}
 
 		if headers, err = fix.ExtractHeader(gcodes); err != nil {
-			return nil, err
+			return err
 		}
 	}
 
-	var buf bytes.Buffer
-
+	bw := bufio.NewWriter(w)
 	for _, h := range headers {
-		buf.Write(h)
-		buf.Write(nl)
+		bw.Write(h)
+		bw.Write(nl)
 	}
 
 	for _, gcode := range gcodes {
-		buf.WriteString(gcode.String())
-		buf.Write(nl)
+		bw.WriteString(gcode.String())
+		bw.Write(nl)
 	}
-	return buf.Bytes(), nil
+	return bw.Flush()
 }
 
-// saveToOutputDir saves the original file content and/or the processed (fixed) file
-// content to the output directory. It returns the path to the fixed file so it
-// can be used later for streaming upload.
-// If saveOriginal is false, only the _fixed file is saved.
-func saveToOutputDir(name string, original io.Reader, fixed []byte, saveOriginal bool) (fixedPath string, err error) {
+// preprocessToOutputDir streams the original content to
+// <OutputDir>/<name> (optional) and the post-processed content to
+// <OutputDir>/<base>_fixed<ext>, reading the input only once and without
+// ever holding the whole file in memory. It returns the path of the fixed
+// file so the upload can stream from disk.
+func preprocessToOutputDir(r io.Reader, name string, saveOriginal bool) (fixedPath string, err error) {
 	if OutputDir == "" {
 		return "", nil
 	}
-
 	if err := os.MkdirAll(OutputDir, 0755); err != nil {
 		return "", fmt.Errorf("failed to create output directory: %w", err)
 	}
 
-	if saveOriginal {
-		// Save original file
-		origPath := filepath.Join(OutputDir, name)
-		origFile, err := os.Create(origPath)
-		if err != nil {
-			return "", fmt.Errorf("failed to save original file: %w", err)
-		}
-		defer origFile.Close()
-		if _, err := io.Copy(origFile, original); err != nil {
-			return "", fmt.Errorf("failed to write original file: %w", err)
-		}
-	}
-
-	// Save fixed (processed) file with _fixed suffix
 	ext := filepath.Ext(name)
 	base := name[:len(name)-len(ext)]
-	fixedName := base + "_fixed" + ext
-	fixedPath = filepath.Join(OutputDir, fixedName)
-	if err := os.WriteFile(fixedPath, fixed, 0644); err != nil {
+	fixedPath = filepath.Join(OutputDir, base+"_fixed"+ext)
+
+	fixed, err := os.Create(fixedPath)
+	if err != nil {
 		return "", fmt.Errorf("failed to save fixed file: %w", err)
 	}
+	defer fixed.Close()
 
+	var src io.Reader = r
+	if saveOriginal {
+		origPath := filepath.Join(OutputDir, name)
+		orig, err := os.Create(origPath)
+		if err != nil {
+			os.Remove(fixedPath)
+			return "", fmt.Errorf("failed to save original file: %w", err)
+		}
+		defer orig.Close()
+		src = io.TeeReader(r, orig)
+	}
+
+	if err := postProcessTo(fixed, src); err != nil {
+		os.Remove(fixedPath)
+		return "", err
+	}
 	return fixedPath, nil
 }
 

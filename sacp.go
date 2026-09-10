@@ -12,6 +12,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"os"
 	"time"
 )
 
@@ -200,30 +201,30 @@ func SACP_connect(ip string, timeout time.Duration) (net.Conn, error) {
 }
 
 func SACP_read(conn net.Conn, timeout time.Duration) (*SACP_pack, error) {
-	var buf [SACP_data_len + 15]byte
+	// 128 bytes of headroom: a full-size chunk reply carries the 60KB payload
+	// plus md5/sequence/framing overhead and would overflow a bare
+	// SACP_data_len+15 buffer.
+	var buf [SACP_data_len + 128]byte
 
 	deadline := time.Now().Add(timeout)
 	conn.SetReadDeadline(deadline)
 
-	n, err := conn.Read(buf[:4])
-	if err != nil {
+	// io.ReadFull loops until the buffer is filled, so a TCP segment that
+	// splits the packet across multiple reads no longer reports a bogus size.
+	if _, err := io.ReadFull(conn, buf[:4]); err != nil {
 		return nil, err
-	}
-	if n != 4 {
-		return nil, errInvalidSize
 	}
 
 	dataLen := binary.LittleEndian.Uint16(buf[2:4])
-	n, err = conn.Read(buf[4 : dataLen+7])
-	if err != nil {
-		return nil, err
-	}
-	if n != int(dataLen+3) {
+	if int(dataLen)+7 > len(buf) {
 		return nil, errInvalidSize
+	}
+	if _, err := io.ReadFull(conn, buf[4:dataLen+7]); err != nil {
+		return nil, err
 	}
 
 	var sacp SACP_pack
-	err = sacp.Decode(buf[:dataLen+7])
+	err := sacp.Decode(buf[:dataLen+7])
 
 	return &sacp, err
 }
@@ -309,35 +310,40 @@ func SACP_send_command(conn net.Conn, command_set uint8, command_id uint8, data 
 	}
 }
 
-func SACP_start_upload(conn net.Conn, filename string, gcode []byte, timeout time.Duration) error {
-	return SACP_start_upload_reader(conn, filename, bytes.NewReader(gcode), int64(len(gcode)), timeout)
-}
-
-// SACP_start_upload_reader streams file content from an io.Reader instead of
-// holding the entire file in memory. It computes the MD5 hash incrementally
-// and reads chunks on demand as the printer requests them.
+// SACP_start_upload_reader streams file content from an io.Reader.
+// The content is spooled to a temporary file so the printer can request
+// chunks in random order (SACP protocol) without the whole file ever
+// residing in memory — files may exceed 1GB on RAM-constrained devices.
+// The MD5 hash is computed incrementally while spooling.
 func SACP_start_upload_reader(conn net.Conn, filename string, reader io.Reader, size int64, timeout time.Duration) error {
-	// Compute MD5 incrementally and buffer all content for random access
-	// (SACP protocol requests chunks non-sequentially, so we need a buffer)
 	h := md5.New()
-	teeReader := io.TeeReader(reader, h)
 
-	gcode, err := io.ReadAll(teeReader)
+	spool, err := os.CreateTemp("", "sm2upload-*.spool")
 	if err != nil {
 		return err
 	}
-	if int64(len(gcode)) != size {
-		log.Printf("Warning: file size mismatch: expected %d, got %d", size, len(gcode))
+	spoolPath := spool.Name()
+	defer func() {
+		spool.Close()
+		os.Remove(spoolPath)
+	}()
+
+	written, err := io.Copy(io.MultiWriter(spool, h), reader)
+	if err != nil {
+		return err
+	}
+	if written != size {
+		log.Printf("Warning: file size mismatch: expected %d, got %d", size, written)
 	}
 	md5hash := h.Sum(nil)
 
 	// prepare data for upload begin packet
-	package_count := uint16((len(gcode) / SACP_data_len) + 1)
+	package_count := uint16((written / SACP_data_len) + 1)
 
 	data := bytes.Buffer{}
 
 	writeSACPstring(&data, filename)
-	writeLE(&data, uint32(len(gcode)))
+	writeLE(&data, uint32(written))
 	writeLE(&data, package_count)
 	writeSACPstring(&data, hex.EncodeToString(md5hash[:]))
 
@@ -390,12 +396,16 @@ func SACP_start_upload_reader(conn net.Conn, filename string, reader io.Reader, 
 			}
 
 			pkgRequested := binary.LittleEndian.Uint16(p.Data[2+md5_len : 2+md5_len+2])
-			var pkgData []byte
 
+			// Read the requested chunk from the spool file (bounded memory).
+			offset := int64(SACP_data_len) * int64(pkgRequested)
+			chunkLen := int64(SACP_data_len)
 			if pkgRequested == package_count-1 { // last package
-				pkgData = gcode[SACP_data_len*int(pkgRequested):]
-			} else { // regular package
-				pkgData = gcode[SACP_data_len*int(pkgRequested) : SACP_data_len*int(pkgRequested+1)]
+				chunkLen = written - offset
+			}
+			pkgData := make([]byte, chunkLen)
+			if _, err := spool.ReadAt(pkgData, offset); err != nil && err != io.EOF {
+				return err
 			}
 
 			data := bytes.Buffer{}

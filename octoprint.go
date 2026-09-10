@@ -3,11 +3,10 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"net/http"
-	"path/filepath"
+	"os"
 	"regexp"
 	"runtime"
 	"strings"
@@ -19,10 +18,10 @@ const (
 )
 
 var (
-	fixShutoff        = true
-	fixPreheat        = true
+	fixShutoff = true
+	fixPreheat = true
 	// fixReinforceTower = true
-	fixReplaceTool    = true
+	fixReplaceTool = true
 
 	// userAgent: OrcaSlicer/01.09.03.50
 	// userAgent: BBL-Slicer/v01.09.03.50 (dark) Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)
@@ -156,24 +155,15 @@ func startOctoPrintServer(listenAddr string, printer *Printer) error {
 		// If output directory is specified and the file needs fixing,
 		// pre-process it and save both original and fixed files to disk.
 		if OutputDir != "" && payload.ShouldBeFix() && !effectiveNoFix {
-			origContent, readErr := io.ReadAll(file)
-			if readErr != nil {
-				log.Printf("Warning: failed to read '%s' for output: %s", payload.Name, readErr)
-			} else {
-				fixedContent, procErr := postProcess(bytes.NewReader(origContent))
-				if procErr != nil {
-					log.Printf("Warning: failed to post-process '%s' for output: %s", payload.Name, procErr)
-				} else {
-					fixedPath, saveErr := saveToOutputDir(payload.Name, bytes.NewReader(origContent), fixedContent, true)
-					if saveErr != nil {
-						log.Printf("Warning: failed to save to output dir: %s", saveErr)
-					} else if fixedPath != "" {
-						payload.FixedFile = fixedPath
-						payload.Size = int64(len(fixedContent))
-						log.Printf("Saved: original -> %s/%s, fixed -> %s/%s_fixed%s",
-							OutputDir, payload.Name, OutputDir, payload.Name[:len(payload.Name)-len(filepath.Ext(payload.Name))], filepath.Ext(payload.Name))
-					}
+			fixedPath, procErr := preprocessToOutputDir(file, payload.Name, true)
+			if procErr != nil {
+				log.Printf("Warning: failed to pre-process '%s' for output: %s", payload.Name, procErr)
+			} else if fixedPath != "" {
+				payload.FixedFile = fixedPath
+				if fi, err := os.Stat(fixedPath); err == nil {
+					payload.Size = fi.Size()
 				}
+				log.Printf("Saved: original -> %s/%s, fixed -> %s", OutputDir, payload.Name, fixedPath)
 			}
 		} else if OutputDir != "" {
 			log.Printf("Skipping output save for '%s' (shouldFix=%v, nofix=%v)",
@@ -292,18 +282,52 @@ func testUserAgent(userAgent, apiKey string) string {
 	if len(matches) >= 2 {
 		slicerName := matches[1]
 		slicerVersion := matches[2]
-		if (slicerName == "PrusaSlicer" && slicerVersion >= "2.8.0") || (slicerName == "OrcaSlicer" && slicerVersion >= "2.1.1") {
+		if (slicerName == "PrusaSlicer" && versionAtLeast(slicerVersion, "2.8.0")) || (slicerName == "OrcaSlicer" && versionAtLeast(slicerVersion, "2.1.1")) {
 			if !strings.Contains(apiKey, "nopreheat") && strings.Contains(apiKey, "preheat") {
 				apiKey = strings.Replace(apiKey, "preheat", "nopreheat", -1)
 			} else {
 				apiKey += ";nopreheat;"
 			}
-		// if !strings.Contains(apiKey, "noreinforcetower") && strings.Contains(apiKey, "reinforceTower") {
-		// 	apiKey = strings.Replace(apiKey, "reinforceTower", "noreinforcetower", -1)
-		// } else {
-		// 	apiKey += ";noreinforcetower;"
-		// }
+			// if !strings.Contains(apiKey, "noreinforcetower") && strings.Contains(apiKey, "reinforceTower") {
+			// 	apiKey = strings.Replace(apiKey, "reinforceTower", "noreinforcetower", -1)
+			// } else {
+			// 	apiKey += ";noreinforcetower;"
+			// }
 		}
 	}
 	return apiKey
+}
+
+// versionAtLeast reports whether version (e.g. "2.10.0") is greater than or
+// equal to target (e.g. "2.8.0"). Numeric segments are compared as integers,
+// so multi-digit segments sort correctly (unlike plain string comparison).
+// Non-numeric suffixes within a segment are ignored.
+func versionAtLeast(version, target string) bool {
+	vs := strings.Split(version, ".")
+	ts := strings.Split(target, ".")
+	for i := 0; i < len(vs) || i < len(ts); i++ {
+		v, t := 0, 0
+		if i < len(vs) {
+			v = versionSegment(vs[i])
+		}
+		if i < len(ts) {
+			t = versionSegment(ts[i])
+		}
+		if v != t {
+			return v > t
+		}
+	}
+	return true
+}
+
+// versionSegment extracts the leading unsigned integer of a version segment.
+func versionSegment(s string) int {
+	n := 0
+	for i := 0; i < len(s) && s[i] >= '0' && s[i] <= '9'; i++ {
+		if n > (1<<31-1)/10 {
+			return 1<<31 - 1
+		}
+		n = n*10 + int(s[i]-'0')
+	}
+	return n
 }
