@@ -41,9 +41,8 @@ windows-386:            GOOS=windows
 windows-386:            GOARCH=386
 windows-386:            EXT=.exe
 
-# Zip archives are derived from PLATFORMS; windows archives carry the
-# binary's .exe suffix and bundle the .bat helpers.
-ZIP_TARGETS := $(foreach p,$(PLATFORMS),$(DIST)$(NAME)-$(p)$(if $(findstring windows,$(p)),.exe,).zip)
+# Zip archive names are derived from PLATFORMS; windows archives carry
+# the binary's .exe suffix and bundle the .bat helpers.
 
 .PHONY: all all-zip test clean dep $(PLATFORMS)
 
@@ -69,17 +68,17 @@ test:
 
 all: dep $(PLATFORMS)
 
-all-zip: all $(ZIP_TARGETS)
-
-# One pattern rule covers both archive flavors: for windows archives the
-# % stem already contains ".exe", so the prerequisite resolves to the
-# windows binary while non-windows stems resolve to the plain binaries.
-$(DIST)$(NAME)-%.zip: $(DIST)$(NAME)-%
+# Archives are packed in one explicit loop derived from PLATFORMS (no
+# implicit pattern rules: chaining an explicit binary rule into a pattern
+# rule breaks on some GNU make versions during a clean CI build).
+all-zip: all
 	@mkdir -p $(DIST)
-	case "$*" in \
-		*.exe) zip -j $@ $< $(EXTRA) *.bat ;; \
-		*)     zip -j $@ $< $(EXTRA) ;; \
-	esac
+	@for p in $(PLATFORMS); do \
+		case $$p in \
+			windows-*) zip -j $(DIST)$(NAME)-$$p.exe.zip $(DIST)$(NAME)-$$p.exe $(EXTRA) *.bat ;; \
+			*)         zip -j $(DIST)$(NAME)-$$p.zip     $(DIST)$(NAME)-$$p     $(EXTRA) ;; \
+		esac; \
+	done
 
 clean:
 	rm -rf $(DIST)$(NAME)-*
