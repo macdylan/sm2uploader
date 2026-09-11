@@ -48,6 +48,9 @@ jobs:
       - name: Build
         run: make all-zip
 
+      - name: Verify artifacts
+        run: make verify
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:

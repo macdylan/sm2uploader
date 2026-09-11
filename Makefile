@@ -48,9 +48,37 @@ windows-386:            EXT=.exe
 
 # ---- Build rules ----
 
+# Platform settings are declared above as target-specific variables and
+# injected EXPLICITLY into the recipe command line: target-specific
+# variables are NOT exported to the recipe environment, so the injected
+# prefix is the only thing that makes go build actually cross-compile.
+# It also keeps the values visible in CI logs for auditing.
 $(PLATFORMS):
 	@mkdir -p $(DIST)
-	$(CMD) -o $(DIST)$(NAME)-$@$(EXT) $(SRC)
+	GOOS=$(GOOS) GOARCH=$(GOARCH) $(if $(GOARM),GOARM=$(GOARM),) CGO_ENABLED=$(or $(CGO_ENABLED),1) $(CMD) -o $(DIST)$(NAME)-$@$(EXT) $(SRC)
+
+# ---- Artifact guard ----
+
+# Assert each artifact's architecture with file(1). This catches missing
+# GOOS/GOARCH/CGO settings instantly: building on a darwin-arm64 host
+# without them silently produces identical host binaries.
+.PHONY: verify
+verify:
+	@set -e; \
+	check() { \
+		if file -b "$$1" | grep -qi "$$2"; then \
+			echo "ok:  $$1 ($$2)"; \
+		else \
+			echo "BAD: $$1 -> $$(file -b $$1) (expected: $$2)"; exit 1; \
+		fi; \
+	}; \
+	check $(DIST)$(NAME)-darwin-arm64      "Mach-O.*arm64"; \
+	check $(DIST)$(NAME)-darwin-amd64      "Mach-O.*x86_64"; \
+	check $(DIST)$(NAME)-linux-amd64       "ELF.*x86-64.*statically linked"; \
+	check $(DIST)$(NAME)-linux-arm7        "ELF 32-bit.*ARM.*statically linked"; \
+	check $(DIST)$(NAME)-linux-arm6        "ELF 32-bit.*ARM.*statically linked"; \
+	check $(DIST)$(NAME)-windows-amd64.exe "PE32\+.*x86-64"; \
+	check $(DIST)$(NAME)-windows-386.exe   "PE32.*80386"
 
 # ---- Meta targets ----
 
